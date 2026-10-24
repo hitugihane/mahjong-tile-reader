@@ -22,4 +22,9 @@ with sync_playwright() as p:
         print(f"{name}: 正解 {r['tileAccuracy']*100:.2f}%  誤り {r['wrong']*100:.2f}%{flagged}  読めず {r['unread']*100:.2f}%  手牌まるごと {r['perfectHands']*100:.1f}%  枚数 {r['countAccuracy']*100:.1f}%  {r['msPerHand']}ms")
         print("   ", r["by"])
         print("   ", r["topConfusions"][:6])
+        if "--per-code" in sys.argv:
+            for code, (ok, none, bad) in sorted(r["perCode"].items(), key=lambda kv: (kv[0][1], kv[0][0])):
+                n = ok + none + bad
+                why = " / ".join(f"{k}×{v}" for k, v in r["whyNone"].get(code, []))
+                print(f"    {code}: 正 {ok/n*100:5.1f}%  読めず {none/n*100:5.1f}%  誤 {bad/n*100:4.1f}%  {why[:110]}")
     browser.close()

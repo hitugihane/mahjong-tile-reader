@@ -123,6 +123,8 @@
     if (!v.noRefs) reader.addReferenceRow(refImg, TILE_CODES);
     let tiles = 0, ok = 0, perfect = 0, countOk = 0, errs = 0, unread = 0, wrongFlagged = 0, wrongTotal = 0;
     const confusion = {};
+    const perCode = {};
+    const whyNone = {};
     const by = {};
     const t0 = performance.now();
     for (const cs of cases) {
@@ -135,6 +137,9 @@
       by[key] ??= [0, 0];
       cs.codes.forEach((c, i) => {
         tiles++;
+        perCode[c] ??= [0, 0, 0]; // 正解・読めず・誤り
+        perCode[c][r.codes[i] === c ? 0 : !r.codes[i] ? 1 : 2]++;
+        if (!r.codes[i] && r.tiles[i].rule) { whyNone[c] ??= {}; const k = r.tiles[i].rule.reason; whyNone[c][k] = (whyNone[c][k] || 0) + 1; }
         by[key][1]++;
         if (r.codes[i] === c) { ok++; by[key][0]++; }
         else if (!r.codes[i]) { all = false; unread++; }
@@ -162,6 +167,8 @@
       msPerHand: +((performance.now() - t0) / cases.length).toFixed(1),
       by: Object.fromEntries(Object.entries(by).sort().map(([k, [a, n]]) => [k, +(a / n).toFixed(4)])),
       topConfusions: Object.entries(confusion).sort((a, b) => b[1] - a[1]).slice(0, 8),
+      perCode,
+      whyNone: Object.fromEntries(Object.entries(whyNone).map(([c, o]) => [c, Object.entries(o).sort((a, b) => b[1] - a[1]).slice(0, 3)])),
     };
   }
   window.results = results;

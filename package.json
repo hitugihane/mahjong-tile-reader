@@ -1,6 +1,6 @@
 {
   "name": "mahjong-tile-reader",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "機械学習を使わずに、並んだ麻雀牌（手牌）の画像から牌を読み取るブラウザ用ライブラリ",
   "type": "module",
   "main": "mahjong-tile-reader.js",
