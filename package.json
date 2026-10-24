@@ -1,0 +1,14 @@
+{
+  "name": "mahjong-tile-reader",
+  "version": "0.4.0",
+  "description": "機械学習を使わずに、並んだ麻雀牌（手牌）の画像から牌を読み取るブラウザ用ライブラリ",
+  "type": "module",
+  "main": "mahjong-tile-reader.js",
+  "exports": {
+    ".": "./mahjong-tile-reader.js",
+    "./tile-art": "./tile-art.js"
+  },
+  "files": ["mahjong-tile-reader.js", "tile-art.js"],
+  "keywords": ["mahjong", "麻雀", "image-recognition", "canvas"],
+  "license": "MIT"
+}

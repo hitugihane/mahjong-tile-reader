@@ -1,0 +1,55 @@
+<!doctype html>
+<meta charset="utf-8" />
+<script type="module">
+  // 赤・緑の牌が、JPEG や縮小でどれだけ色を失うか（＝黒に化けるか）を測る。
+  // 「色の残り」= (色み / 暗さ) を、きれいな画像のときを 100% として比べたもの。
+  import { extractFeatures, analyzeImage } from '../mahjong-tile-reader.js';
+  import { drawTile, ART } from '../tile-art.js';
+
+  const variants = {
+    中: { code: '7z', ch: 1, colors: { 明るい赤: '#cc2b2b', 暗い赤: '#9a1c1c', かなり暗い赤: '#701212', 朱色: '#c8502e' }, key: 'red' },
+    發: { code: '6z', ch: 2, colors: { 緑: '#1d8a4a', 暗い緑: '#145e32', 黄緑: '#5a9a2a' }, key: 'green' },
+  };
+  const conds = [
+    { name: 'きれい', h: 84, q: null },
+    { name: 'JPEG品質80%', h: 84, q: 0.8 },
+    { name: 'JPEG品質50%', h: 84, q: 0.5 },
+    { name: '高さ40px+JPEG', h: 40, q: 0.5 },
+  ];
+
+  async function tileImage(code, h, q) {
+    const w = Math.round(h * 0.72);
+    const c = new OffscreenCanvas(w + 8, h + 8);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#2f6b4f';
+    ctx.fillRect(0, 0, c.width, c.height);
+    drawTile(ctx, code, 4, 4, w, h);
+    if (q == null) return ctx.getImageData(0, 0, c.width, c.height);
+    const bmp = await createImageBitmap(await c.convertToBlob({ type: 'image/jpeg', quality: q }));
+    const d = new OffscreenCanvas(c.width, c.height).getContext('2d');
+    d.drawImage(bmp, 0, 0);
+    return d.getImageData(0, 0, c.width, c.height);
+  }
+
+  const out = [];
+  const orig = { red: ART.red, green: ART.green };
+  for (const [tname, v] of Object.entries(variants)) {
+    for (const [cname, color] of Object.entries(v.colors)) {
+      ART[v.key] = color;
+      let base = null;
+      const row = { 牌: tname, 色: cname };
+      for (const cd of conds) {
+        const img = await tileImage(v.code, cd.h, cd.q);
+        const f = extractFeatures(analyzeImage(img), { x: 4, y: 4, w: Math.round(cd.h * 0.72), h: Math.round(cd.h * 0.86) }, { grid: [16, 20], smooth: 0 });
+        let dark = 0, colr = 0;
+        for (let i = 0; i < f.length; i += 4) { dark += f[i]; colr += f[i + v.ch]; }
+        const ratio = colr / dark;
+        base ??= ratio;
+        row[cd.name] = Math.round((ratio / base) * 100) + '%';
+      }
+      out.push(row);
+      ART.red = orig.red; ART.green = orig.green;
+    }
+  }
+  window.results = out;
+</script>

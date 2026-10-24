@@ -1,0 +1,4 @@
+node_modules/
+package-lock.json
+# 私用ワークスペース向けの依頼文（公開しない）
+引き継ぎプロンプト.md

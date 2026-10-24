@@ -1,0 +1,56 @@
+<!doctype html>
+<meta charset="utf-8" />
+<script type="module">
+  // 牌 1 枚ずつを規則だけで読み、何と判定したか（または決められなかった理由）を一覧にする
+  import { readTileByRules, TILE_CODES } from '../mahjong-tile-reader.js';
+  import { drawTile, useStyle } from '../tile-art.js';
+
+  const params = new URLSearchParams(location.search);
+  useStyle(params.get('style') || 'A');
+  const conds = [
+    { name: '84px', h: 84 },
+    { name: '50px', h: 50 },
+    { name: '40px+ぼかし', h: 40, blur: 0.6 },
+    { name: '84px+JPEG50', h: 84, q: 0.5 },
+  ];
+
+  async function tileImage(code, c) {
+    const w = Math.round(c.h * 0.72);
+    let cv = new OffscreenCanvas(w + 8, c.h + 8);
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#2f6b4f';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    drawTile(ctx, code, 4, 4, w, c.h);
+    if (c.blur) {
+      const s = new OffscreenCanvas(Math.round(cv.width * c.blur), Math.round(cv.height * c.blur));
+      s.getContext('2d').drawImage(cv, 0, 0, s.width, s.height);
+      const b = new OffscreenCanvas(cv.width, cv.height);
+      b.getContext('2d').drawImage(s, 0, 0, cv.width, cv.height);
+      cv = b;
+    }
+    if (c.q) {
+      const bmp = await createImageBitmap(await cv.convertToBlob({ type: 'image/jpeg', quality: c.q }));
+      const d = new OffscreenCanvas(cv.width, cv.height);
+      d.getContext('2d').drawImage(bmp, 0, 0);
+      cv = d;
+    }
+    return { img: cv.getContext('2d').getImageData(0, 0, cv.width, cv.height), box: { x: 4, y: 4, w, h: Math.round(c.h * 0.86) } };
+  }
+
+  const rows = [];
+  const score = Object.fromEntries(conds.map((c) => [c.name, { right: 0, wrong: 0, none: 0 }]));
+  for (const code of TILE_CODES) {
+    const row = { 牌: code };
+    for (const c of conds) {
+      const { img, box } = await tileImage(code, c);
+      const r = readTileByRules(img, box);
+      const s = score[c.name];
+      if (!r.code) { s.none++; row[c.name] = '— ' + r.reason; }
+      else if (r.code === code) { s.right++; row[c.name] = '○'; }
+      else { s.wrong++; row[c.name] = '× ' + r.code + '（' + r.reason + '）'; }
+    }
+    rows.push(row);
+  }
+  rows.push({ 牌: '集計', ...Object.fromEntries(Object.entries(score).map(([k, v]) => [k, `正${v.right} 誤${v.wrong} 保留${v.none}`])) });
+  window.results = rows;
+</script>

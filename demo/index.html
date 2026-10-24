@@ -1,0 +1,572 @@
+<title>手牌リーダー</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@600;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  /* Layout: one narrow working column; the felt-green "table" panel holds the image, results sit below like a score sheet */
+  :root {
+    --bg: #eef2ef;
+    --surface: #ffffff;
+    --line: #d3ddd6;
+    --fg: #16231c;
+    --muted: #5b6b62;
+    --felt: #1f5d43;
+    --felt-ink: #e9f3ed;
+    --accent: #1f6b4a;
+    --accent-soft: #dcebe2;
+    --bad: #c3352b;
+    --bad-soft: #f8e1de;
+    --warn: #a86a06;
+    --display: "Shippori Mincho B1", "Hiragino Mincho ProN", "Yu Mincho", serif;
+    --body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e1713; --surface: #15221c; --line: #2a3a32; --fg: #e4eee8; --muted: #9aaca2;
+      --felt: #173f2f; --felt-ink: #e4eee8; --accent: #5cbf8d; --accent-soft: #1d3a2d;
+      --bad: #ef6b5f; --bad-soft: #3d1f1c; --warn: #e3a43b; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e1713; --surface: #15221c; --line: #2a3a32; --fg: #e4eee8; --muted: #9aaca2;
+    --felt: #173f2f; --felt-ink: #e4eee8; --accent: #5cbf8d; --accent-soft: #1d3a2d;
+    --bad: #ef6b5f; --bad-soft: #3d1f1c; --warn: #e3a43b; color-scheme: dark;
+  }
+  body {
+    background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.7;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 28px 56px;
+  }
+  main { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+  h1 { font-family: var(--display); font-weight: 800; font-size: clamp(30px, 7vw, 42px); line-height: 1.15; margin: 0; letter-spacing: 0.02em; text-wrap: balance; }
+  h2 { font-family: var(--display); font-weight: 600; font-size: 21px; margin: 0; text-wrap: balance; }
+  p { margin: 0; }
+  .lead { color: var(--muted); max-width: 60ch; margin-top: 8px; }
+  header .code { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+  section { display: flex; flex-direction: column; gap: 14px; }
+  .table {
+    background: var(--felt); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 12px;
+    color: var(--felt-ink);
+  }
+  .table canvas.view { width: 100%; height: auto; display: block; border-radius: 4px; image-rendering: auto; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; font-size: 14px; }
+  .controls label { display: inline-flex; align-items: center; gap: 6px; }
+  input[type="range"] { accent-color: var(--accent); width: 130px; }
+  input[type="checkbox"] { accent-color: var(--accent); }
+  button, .file {
+    font: inherit; font-size: 14px; font-weight: 500; border-radius: 6px; padding: 7px 14px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--surface); color: var(--fg);
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+  .table button { border-color: transparent; }
+  button:focus-visible, .file:focus-within, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .file input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .file { position: relative; display: inline-flex; align-items: center; }
+
+  .readout { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+  .codeline { font-family: var(--mono); font-size: 17px; font-weight: 600; word-break: break-all; }
+  .verdict { font-size: 13px; padding: 2px 10px; border-radius: 99px; font-weight: 700; }
+  .verdict.ok { background: var(--accent-soft); color: var(--accent); }
+  .verdict.ng { background: var(--bad-soft); color: var(--bad); }
+  .verdict.info { background: var(--accent-soft); color: var(--fg); font-weight: 500; }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 6px; }
+  .tile {
+    display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 2px 3px;
+    border-radius: 6px; border: 1px solid transparent; background: none; cursor: pointer; font-size: 11px; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .tile canvas { width: 34px; height: 47px; }
+  .tile.sel { border-color: var(--accent); background: var(--accent-soft); }
+  .tile.wrong { background: var(--bad-soft); color: var(--bad); }
+  .tile.unsure .conf { color: var(--warn); font-weight: 700; }
+  .tile .truth { color: var(--bad); font-weight: 700; }
+
+  .inspect { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  .inspect figure { margin: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  .inspect canvas { width: 96px; height: 120px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
+  .cands { font-size: 13px; min-width: 0; flex: 1 1 200px; display: flex; flex-direction: column; gap: 4px; }
+  .cands table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  .cands td { padding: 2px 10px 2px 0; }
+  .cands td.num { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .step { display: flex; flex-direction: column; gap: 8px; }
+  .step-label { font-size: 12px; letter-spacing: 0.08em; color: var(--muted); font-weight: 700; }
+  input[type="text"] {
+    font-family: var(--mono); font-size: 14px; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--fg); width: 100%; box-sizing: border-box;
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .msg { font-size: 13px; color: var(--muted); }
+  .msg.err { color: var(--bad); }
+  .msg.good { color: var(--accent); }
+
+  .bench { overflow-x: auto; }
+  .bench table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .bench th, .bench td { text-align: left; padding: 7px 10px 7px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .bench th { font-size: 12px; color: var(--muted); font-weight: 500; }
+  .bench td.n { font-family: var(--mono); }
+  .bench tr.best td { font-weight: 700; color: var(--accent); }
+  .note { font-size: 13px; color: var(--muted); max-width: 65ch; }
+  pre.usage {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.6; background: var(--surface); border: 1px solid var(--line);
+    border-radius: 8px; padding: 14px; overflow-x: auto; margin: 0;
+  }
+  @media (prefers-reduced-motion: no-preference) { .tile { transition: background-color .15s; } }
+</style>
+
+<main>
+  <header>
+    <span class="code">mahjong-tile-reader v0.3</span>
+    <h1>手牌リーダー</h1>
+    <p class="lead">並んだ手牌の画像を、機械学習なしで「123m456p…」の文字列に読み取ります。牌の表面を16×20のマスに分け、各マスの暗さ・赤み・緑み・青みを基準牌と比べています。色をしきい値で分けないので、JPEGやぼかしで赤や緑が黒に化けません。さらに基準なしの「規則」でも読みます。筒子・索子は粒の数・並び・赤の位置・中心線の余白、字牌は白の配置（北は縦の白線、南は真ん中の穴、東は左下が斜めに欠ける など）。答えが食い違えば自信なしにします。</p>
+  </header>
+
+  <section aria-labelledby="try">
+    <h2 id="try">サンプルの手牌で試す</h2>
+    <div class="table">
+      <canvas class="view" id="view" aria-label="読み取り中の手牌画像"></canvas>
+      <div class="controls">
+        <button class="primary" id="reroll">別の手牌を作る</button>
+        <label>牌の高さ <input type="range" id="size" min="34" max="130" value="64"> <span id="sizeVal">64px</span></label>
+        <label><input type="checkbox" id="blur" checked> ぼかす</label>
+        <label><input type="checkbox" id="noise" checked> ノイズ</label>
+        <label>測り方
+          <select id="mode">
+            <option value="sum">足し算（既定）</option>
+            <option value="dots">ドット判定</option>
+          </select>
+        </label>
+        <label>読み方
+          <select id="how">
+            <option value="both">組み合わせ（既定）</option>
+            <option value="template">見比べだけ</option>
+            <option value="rules">規則だけ（基準なし）</option>
+          </select>
+        </label>
+        <label>絵柄
+          <select id="style">
+            <option value="A">A（基準と同じ）</option>
+            <option value="B">B（基準と違う）</option>
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <div class="readout">
+      <span class="codeline" id="codeline">—</span>
+      <span class="verdict info" id="verdict">読み取り中</span>
+      <button id="copy">コピー</button>
+    </div>
+    <div class="tiles" id="tiles" role="list"></div>
+
+    <div class="inspect" id="inspect">
+      <figure><canvas id="crop" width="96" height="120"></canvas><figcaption>切り出した表面</figcaption></figure>
+      <figure><canvas id="grid" width="160" height="200"></canvas><figcaption id="gridCap">16×20 の特徴</figcaption></figure>
+      <div class="cands" id="cands"></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="own">
+    <h2 id="own">自分の画像で読む</h2>
+    <p class="note">絵柄はゲームや牌セットごとに違うので、まず同じ絵柄の牌を1列並べた画像で基準を登録します。34種を何回かに分けて登録しても構いません（足りない牌は読めません）。</p>
+    <div class="card">
+      <div class="step">
+        <span class="step-label">1. 基準を登録</span>
+        <label class="msg" for="refCodes">画像に写っている牌を左から順に</label>
+        <input type="text" id="refCodes" value="123456789m123456789p123456789s1234567z" spellcheck="false" autocomplete="off">
+        <div class="row">
+          <span class="file">基準画像を選ぶ<input type="file" id="refFile" accept="image/*"></span>
+          <button id="resetRefs">サンプル基準に戻す</button>
+          <button id="copyRefs">基準をJSONでコピー</button>
+        </div>
+        <p class="msg" id="refMsg">まだ自分の基準はありません。登録するまではサンプルの絵柄で読みます。</p>
+      </div>
+      <div class="step">
+        <span class="step-label">2. 手牌を読む</span>
+        <div class="row">
+          <span class="file">手牌の画像を選ぶ<input type="file" id="handFile" accept="image/*"></span>
+          <label class="msg">枚数
+            <select id="count">
+              <option value="auto">自動（13か14）</option>
+              <option value="13">13枚</option>
+              <option value="14">14枚</option>
+            </select>
+          </label>
+        </div>
+        <p class="msg">手牌の部分だけを切り抜いた画像だと確実です。読んだ結果は上の表示に出ます。</p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="bench">
+    <h2 id="bench">精度の目安</h2>
+    <p class="note">サンプル絵柄の手牌400組（牌の高さ34〜130px、ぼかし・明るさ・色かぶり・ノイズ、半数はJPEG品質50〜90%）での牌の正解率です。基準はいつも絵柄Aで登録しています。</p>
+    <div class="bench">
+      <table>
+        <thead><tr><th>条件</th><th>正解率</th><th>メモ</th></tr></thead>
+        <tbody>
+          <tr class="best"><td>同じ絵柄（組み合わせ・既定）</td><td class="n">99.85%</td><td>手牌まるごと正解 98.2%</td></tr>
+          <tr><td>暗い赤・暗い緑の絵柄</td><td class="n">99.78%</td><td>v0.1 は 98.40%</td></tr>
+          <tr><td>違う絵柄・見比べだけ</td><td class="n">95.43%</td><td>一索→北、七萬→九萬 など</td></tr>
+          <tr><td>違う絵柄・組み合わせ</td><td class="n">95.51%</td><td>残る誤りの9割に「自信なし」表示</td></tr>
+          <tr><td>規則だけ（基準なし）</td><td class="n">約64%</td><td>残りは「?」。誤りは0.1〜0.2%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">規則で読めるのは、筒子・索子（一索を除く）・一〜三萬・字牌7種です。四〜九萬と一索は字や絵の細かい形なので、見比べに任せています。違う絵柄で残る誤りはこの範囲に集中しているので、使う絵柄で基準を登録すれば解消します。</p>
+  </section>
+
+  <section aria-labelledby="use">
+    <h2 id="use">コードから使う</h2>
+<pre class="usage"><code>import { createReader } from './mahjong-tile-reader.js';
+
+const reader = createReader();
+// 同じ絵柄の牌を1列並べた画像で基準を登録（img / canvas / ImageData）
+reader.addReferenceRow(refImage, '123456789m123456789p123456789s1234567z');
+
+const result = reader.readHand(handImage);   // { count: 13 } で枚数指定も可
+result.text;        // "123m456p789s11z..."
+result.uncertain;   // 自信のない牌の位置
+
+// 基準は JSON にして保存・再利用できます
+localStorage.setItem('refs', JSON.stringify(reader.exportReferences()));</code></pre>
+  </section>
+</main>
+
+<script type="module">
+  import { createReader, TILE_CODES, tileName, extractFeatures, analyzeImage, toImageData } from './mahjong-tile-reader.js';
+  import { drawHand, drawTile, useStyle } from './tile-art.js';
+
+  const $ = (id) => document.getElementById(id);
+  const storeKey = () => 'mtr-user-refs-' + mode;
+  let mode = 'sum';
+  const modeOpts = () => (mode === 'dots' ? { mode: 'dots' } : {});
+  let how = 'both'; // both / template / rules
+  const readerOpts = () => ({ ...modeOpts(), ...(how === 'template' ? { rules: false } : {}) });
+  const userRows = []; // このページで登録した基準画像（測り方を切り替えたら登録し直す）
+
+  let rngSeed = Date.now() >>> 0;
+  const rand = () => ((rngSeed = (rngSeed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const pick = (a) => a[Math.floor(rand() * a.length)];
+
+  // --- 基準 ---------------------------------------------------------------
+  function sampleReader() {
+    const r = createReader(readerOpts());
+    if (how === 'rules') return r; // 規則だけ: 基準を登録しない
+    useStyle('A'); // 基準はいつも絵柄 A
+    const s = drawHand(null, TILE_CODES, { tileH: 84 });
+    const c = document.createElement('canvas');
+    c.width = s.width; c.height = s.height;
+    drawHand(c.getContext('2d'), TILE_CODES, { tileH: 84 });
+    r.addReferenceRow(c, TILE_CODES);
+    return r;
+  }
+  let sample;       // サンプル絵柄用（サンプル手牌はいつもこちらで読む）
+  let user = null;  // 自分で登録した基準
+  const active = () => (how === 'rules' || (current && current.truth) ? sample : user || sample);
+
+  function setRefMsg(text, cls = '') { const m = $('refMsg'); m.textContent = text; m.className = 'msg ' + cls; }
+  function describeUser() {
+    const codes = user.registeredCodes;
+    const missing = TILE_CODES.filter((c) => !codes.includes(c));
+    return `自分の基準: ${codes.length}種登録済み` + (missing.length ? `（未登録 ${missing.length}種: ${missing.map(tileName).join(' ')}）` : '（34種そろっています）');
+  }
+
+  // --- 画像の用意 -----------------------------------------------------------
+  let current = null; // { canvas, imageData, truth }
+
+  function makeSampleHand() {
+    const len = rand() < 0.5 ? 13 : 14;
+    const truth = Array.from({ length: len }, () => pick(TILE_CODES));
+    const tileH = Number($('size').value);
+    const o = { tileH, gap: pick([0, 1, 2, 2]), tsumoGap: len === 14 ? Math.round(tileH * 0.3) : 0, pad: 10 };
+    const s = drawHand(null, truth, o);
+    let c = document.createElement('canvas');
+    c.width = s.width; c.height = s.height;
+    useStyle($('style').value);
+    drawHand(c.getContext('2d'), truth, o);
+    useStyle('A');
+    if ($('blur').checked) {
+      const k = 0.6;
+      const small = document.createElement('canvas');
+      small.width = Math.round(s.width * k); small.height = Math.round(s.height * k);
+      small.getContext('2d').drawImage(c, 0, 0, small.width, small.height);
+      const back = document.createElement('canvas');
+      back.width = s.width; back.height = s.height;
+      back.getContext('2d').drawImage(small, 0, 0, s.width, s.height);
+      c = back;
+    }
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    if ($('noise').checked) {
+      const img = ctx.getImageData(0, 0, c.width, c.height);
+      const p = img.data;
+      const bright = 0.85 + rand() * 0.25;
+      for (let i = 0; i < p.length; i += 4) {
+        for (let q = 0; q < 3; q++) {
+          const v = p[i + q] * bright + (rand() - 0.5) * 22;
+          p[i + q] = v < 0 ? 0 : v > 255 ? 255 : v;
+        }
+      }
+      ctx.putImageData(img, 0, 0);
+    }
+    return { canvas: c, imageData: ctx.getImageData(0, 0, c.width, c.height), truth };
+  }
+
+  // --- 読み取りと表示 -------------------------------------------------------
+  let result = null;
+  let selected = 0;
+
+  function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+  function run(countOpt) {
+    const view = $('view');
+    const src = current.canvas;
+    view.width = src.width; view.height = src.height;
+    const ctx = view.getContext('2d');
+    ctx.drawImage(src, 0, 0);
+    try {
+      const opts = countOpt && countOpt !== 'auto' ? { count: Number(countOpt) } : {};
+      result = active().readHand(current.imageData, opts);
+    } catch (e) {
+      result = null;
+      $('codeline').textContent = '—';
+      setVerdict('ng', e.message);
+      $('tiles').replaceChildren();
+      $('cands').replaceChildren();
+      return;
+    }
+    const lw = Math.max(1, Math.round(src.width / 500));
+    result.tiles.forEach((t, i) => {
+      const b = t.faceBox;
+      ctx.lineWidth = lw * 2;
+      const wrong = current.truth && t.code && current.truth[i] !== t.code;
+      ctx.strokeStyle = wrong ? '#ef4b3f' : result.uncertain.includes(i) ? '#f2b33d' : '#43e08f';
+      ctx.strokeRect(b.x, b.y, b.w, b.h);
+    });
+    $('codeline').textContent = result.text;
+    if (current.truth) {
+      const ok = result.codes.filter((c, i) => c === current.truth[i]).length;
+      const unread = result.codes.filter((c) => !c).length;
+      const n = current.truth.length;
+      if (result.codes.length !== n) setVerdict('ng', `${result.codes.length}枚と判定（正しくは${n}枚）`);
+      else setVerdict(ok === n ? 'ok' : ok + unread === n ? 'info' : 'ng', `${n}枚中 ${ok}枚 正解` + (unread ? `・読めず ${unread}枚` : ''));
+    } else {
+      setVerdict('info', `${result.codes.length}枚` + (result.uncertain.length ? `・自信なし ${result.uncertain.length}枚` : ''));
+    }
+    renderTiles();
+    select(Math.min(selected, result.tiles.length - 1));
+  }
+
+  function setVerdict(kind, text) { const v = $('verdict'); v.className = 'verdict ' + kind; v.textContent = text; }
+
+  function renderTiles() {
+    const box = $('tiles');
+    box.replaceChildren();
+    result.tiles.forEach((t, i) => {
+      const b = document.createElement('button');
+      b.className = 'tile';
+      b.setAttribute('role', 'listitem');
+      const truth = current.truth?.[i];
+      if (truth && t.code && truth !== t.code) b.classList.add('wrong');
+      if (result.uncertain.includes(i)) b.classList.add('unsure');
+      const SRC = { both: '一致', template: '見比べ', rule: '規則', disagree: '食い違い', none: '読めず' };
+      b.setAttribute('aria-label', `${i + 1}枚目 ${t.code ? tileName(t.code) : '読めず'}（${SRC[t.source]}）`);
+      const c = document.createElement('canvas');
+      c.width = 68; c.height = 94;
+      const cx = c.getContext('2d');
+      if (t.code) drawTile(cx, t.code, 0, 0, 68, 94);
+      else {
+        drawTile(cx, '5z', 0, 0, 68, 94);
+        cx.fillStyle = '#8a958f'; cx.font = 'bold 40px system-ui, sans-serif'; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+        cx.fillText('?', 34, 42);
+      }
+      const conf = document.createElement('span');
+      conf.className = 'conf';
+      conf.textContent = SRC[t.source];
+      b.append(c, conf);
+      if (truth && t.code && truth !== t.code) {
+        const tr = document.createElement('span');
+        tr.className = 'truth';
+        tr.textContent = '正:' + tileName(truth);
+        b.append(tr);
+      }
+      b.addEventListener('click', () => select(i));
+      box.append(b);
+    });
+  }
+
+  function select(i) {
+    if (!result || i < 0) return;
+    selected = i;
+    [...$('tiles').children].forEach((el, k) => el.classList.toggle('sel', k === i));
+    const t = result.tiles[i];
+    const fb = t.faceBox;
+
+    const crop = $('crop').getContext('2d');
+    crop.clearRect(0, 0, 96, 120);
+    crop.drawImage(current.canvas, fb.x, fb.y, fb.w, fb.h, 0, 0, 96, 120);
+
+    const [GX, GY] = active().grid;
+    const f = extractFeatures(analyzeImage(current.imageData), t.box, active().options);
+    $('gridCap').textContent = active().mode === 'dots' ? '16×20 のドット判定' : '16×20 の特徴';
+    const g = $('grid').getContext('2d');
+    const cw = 160 / GX, ch = 200 / GY;
+    const inks = [[27, 27, 27], [204, 43, 43], [29, 138, 74], [31, 79, 168]];
+    const clamp = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+    for (let y = 0; y < GY; y++) for (let x = 0; x < GX; x++) {
+      // 特徴は「暗さ・赤み・緑み・青み」。色みで説明できない暗さを黒として塗る
+      const o = (y * GX + x) * 4;
+      const colors = [1, 2, 3].map((k) => clamp(f[o + k] * 1.2));
+      const amounts = [clamp((f[o] - Math.max(...colors) * 0.8) * 1.4), ...colors];
+      let rgb = [246, 242, 231];
+      for (let k = 0; k < 4; k++) {
+        const a = amounts[k];
+        rgb = rgb.map((v, j) => v * (1 - a) + inks[k][j] * a);
+      }
+      g.fillStyle = `rgb(${rgb.map(Math.round).join(',')})`;
+      g.fillRect(x * cw, y * ch, Math.ceil(cw), Math.ceil(ch));
+    }
+
+    const rows = t.candidates.map((c, k) =>
+      `<tr><td>${k === 0 ? '<strong>' + tileName(c.code) + '</strong>' : tileName(c.code)}</td><td class="num">${c.code}</td><td class="num">差 ${c.distance.toFixed(2)}</td></tr>`
+    ).join('');
+    const rule = t.rule
+      ? `<span class="msg"><strong>規則:</strong> ${t.rule.code ? tileName(t.rule.code) + '（' + t.rule.reason + '）' : '決められない（' + t.rule.reason + '）'}</span>`
+      : '';
+    $('cands').innerHTML = `<span><strong>${i + 1}枚目</strong> ` + (rows ? 'の見比べ候補（差が小さいほど似ている）</span><table>' + rows + '</table>' : '</span>') + rule +
+      (t.source === 'disagree' ? '<span class="msg">見比べと規則の答えが食い違ったので、自信なしにしています。</span>' : '') +
+      (rows && t.code && t.code[1] === 'm' ? '<span class="msg">萬子なので、上半分の黒い数字だけで比べ直しています。</span>' : '');
+  }
+
+  // --- イベント -------------------------------------------------------------
+  function newSample() { current = makeSampleHand(); run(); }
+  $('reroll').addEventListener('click', newSample);
+  $('size').addEventListener('input', () => { $('sizeVal').textContent = $('size').value + 'px'; });
+  $('size').addEventListener('change', newSample);
+  $('blur').addEventListener('change', newSample);
+  $('noise').addEventListener('change', newSample);
+
+  $('copy').addEventListener('click', async () => {
+    const text = $('codeline').textContent;
+    try { await navigator.clipboard.writeText(text); $('copy').textContent = 'コピーしました'; }
+    catch { const r = document.createRange(); r.selectNodeContents($('codeline')); getSelection().removeAllRanges(); getSelection().addRange(r); $('copy').textContent = '選択しました'; }
+    setTimeout(() => ($('copy').textContent = 'コピー'), 1500);
+  });
+
+  function loadImage(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => { resolve(img); URL.revokeObjectURL(url); };
+      img.onerror = () => reject(new Error('画像を開けませんでした'));
+      img.src = url;
+    });
+  }
+  function toCanvas(img) {
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    c.getContext('2d', { willReadFrequently: true }).drawImage(img, 0, 0);
+    return c;
+  }
+
+  $('refFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const codes = $('refCodes').value;
+      const img = await loadImage(file);
+      if (!user) user = createReader(readerOpts());
+      const layout = user.addReferenceRow(img, codes);
+      userRows.push({ img, codes });
+      try { localStorage.setItem(storeKey(), JSON.stringify(user.exportReferences())); } catch {}
+      setRefMsg(`${layout.boxes.length}枚を登録しました。` + describeUser(), 'good');
+      current = { canvas: toCanvas(img), imageData: toImageData(toCanvas(img)), truth: null };
+      run(layout.boxes.length);
+    } catch (err) {
+      setRefMsg('登録できませんでした: ' + err.message, 'err');
+    }
+    e.target.value = '';
+  });
+
+  $('handFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const img = await loadImage(file);
+      const c = toCanvas(img);
+      current = { canvas: c, imageData: c.getContext('2d').getImageData(0, 0, c.width, c.height), truth: null };
+      selected = 0;
+      run($('count').value);
+      $('view').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+    } catch (err) {
+      setVerdict('ng', err.message);
+    }
+    e.target.value = '';
+  });
+
+  $('resetRefs').addEventListener('click', () => {
+    user = null;
+    userRows.length = 0;
+    try { for (const m of ['sum', 'dots']) localStorage.removeItem('mtr-user-refs-' + m); } catch {}
+    setRefMsg('自分の基準を消して、サンプルの絵柄に戻しました（34種）。');
+    newSample();
+  });
+
+  $('copyRefs').addEventListener('click', async () => {
+    const json = JSON.stringify((user || sample).exportReferences());
+    try { await navigator.clipboard.writeText(json); setRefMsg(`基準のJSONをコピーしました（${Math.round(json.length / 1024)}KB）。importReferences で読み込めます。`, 'good'); }
+    catch { setRefMsg('この画面ではコピーできませんでした。', 'err'); }
+  });
+
+  // 自分の基準を、今の測り方で用意する（このページで登録した画像があれば登録し直す）
+  function loadUser() {
+    user = null;
+    if (userRows.length) {
+      user = createReader(readerOpts());
+      for (const r of userRows) user.addReferenceRow(r.img, r.codes);
+      try { localStorage.setItem(storeKey(), JSON.stringify(user.exportReferences())); } catch {}
+      return '測り方に合わせて基準を登録し直しました。';
+    }
+    try {
+      const saved = localStorage.getItem(storeKey());
+      if (saved) {
+        const r = createReader(readerOpts());
+        r.importReferences(saved);
+        user = r;
+        return '前回登録した基準を読み込みました。';
+      }
+    } catch {}
+    return null;
+  }
+
+  $('style').addEventListener('change', newSample);
+  $('how').addEventListener('change', () => {
+    how = $('how').value;
+    sample = sampleReader();
+    loadUser();
+    if (current) run(current.truth ? undefined : $('count').value);
+  });
+
+  $('mode').addEventListener('change', () => {
+    mode = $('mode').value;
+    sample = sampleReader();
+    const note = loadUser();
+    if (note) setRefMsg(note + describeUser());
+    else setRefMsg(mode === 'dots'
+      ? 'ドット判定用の自分の基準はまだありません。登録するまではサンプルの絵柄で読みます。'
+      : 'まだ自分の基準はありません。登録するまではサンプルの絵柄で読みます。');
+    if (current) run(current.truth ? undefined : $('count').value);
+  });
+
+  // --- 起動 -----------------------------------------------------------------
+  await document.fonts.ready;
+  sample = sampleReader();
+  const note = loadUser();
+  if (note) setRefMsg(note + describeUser());
+  newSample();
+</script>

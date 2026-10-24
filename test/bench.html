@@ -1,0 +1,170 @@
+<!doctype html>
+<meta charset="utf-8" />
+<script type="module">
+  // 精度ベンチマーク。基準はきれいな 1 列から登録し、崩した手牌を読ませる。
+  // パラメータ:
+  //   n        手牌の数
+  //   seed     乱数の種
+  //   jpeg     JPEG にする割合（品質 50〜90%）
+  //   palette  normal / dark（暗い赤・暗い緑の絵柄）
+  //   style    読ませる手牌の絵柄 A / B（基準はいつも絵柄 A で登録）
+  //   photo    写真らしくする割合（机の背景・影・遠近・傾き・照明のむら）
+  //   tilt     写真らしくするときの傾きの最大（度、既定 2）
+  //   count    known なら枚数を教えて読む（既定は自動）
+  //   refPhoto 1 なら基準の画像も写真らしくする
+  //   effects  写真らしさのうち使うもの（既定 persp,tilt,light,shadow,drop。机の背景はいつも入る）
+  //   variants [{ "name": "...", "opts": { createReader に渡す設定 }, "old": true で v0.1 }, ...]
+  import { createReader, TILE_CODES } from '../mahjong-tile-reader.js';
+  import { createReader as createOld } from './v0.1-reader.js';
+  import { drawHand, ART, useStyle } from '../tile-art.js';
+  import { photoize } from './photo-sim.js';
+
+  const params = new URLSearchParams(location.search);
+  const N = Number(params.get('n') || 300);
+  const JPEG = Number(params.get('jpeg') ?? 0.5);
+  if (params.get('palette') === 'dark') { ART.red = '#8e1a1a'; ART.green = '#145e32'; }
+  const KNOWN = params.get('count') === 'known'; // 枚数を教える（アプリでは手牌の枚数が分かっている）
+  const PHOTO = Number(params.get('photo') ?? 0); // 写真らしくする割合
+  const TILT = Number(params.get('tilt') ?? 2); // 傾きの最大（度）
+  // 写真らしさのうち使うもの（原因を切り分けるとき用）: persp,tilt,light,shadow,drop
+  const EFFECTS = (params.get('effects') || 'persp,tilt,light,shadow,drop').split(',');
+  const variants = JSON.parse(params.get('variants') || '[{"name":"既定","opts":{}}]');
+
+  let seed = Number(params.get('seed') || 1);
+  const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const pick = (a) => a[Math.floor(rand() * a.length)];
+  const between = (a, b) => a + (b - a) * rand();
+
+  function render(codes, o) {
+    const s = drawHand(null, codes, o);
+    const c = new OffscreenCanvas(s.width, s.height);
+    drawHand(c.getContext('2d'), codes, o);
+    return c;
+  }
+
+  async function degrade(c, d) {
+    const w = c.width, h = c.height;
+    let src = c;
+    if (d.blur < 1) {
+      const small = new OffscreenCanvas(Math.max(1, Math.round(w * d.blur)), Math.max(1, Math.round(h * d.blur)));
+      small.getContext('2d').drawImage(c, 0, 0, small.width, small.height);
+      src = new OffscreenCanvas(w, h);
+      src.getContext('2d').drawImage(small, 0, 0, w, h);
+    }
+    const ctx = src.getContext('2d', { willReadFrequently: true });
+    const img = ctx.getImageData(0, 0, w, h);
+    const p = img.data;
+    for (let i = 0; i < p.length; i += 4) {
+      for (let k = 0; k < 3; k++) {
+        const v = p[i + k] * d.bright * d.tint[k] + (rand() - 0.5) * 2 * d.noise;
+        p[i + k] = v < 0 ? 0 : v > 255 ? 255 : v;
+      }
+    }
+    if (!d.jpeg) return img;
+    ctx.putImageData(img, 0, 0);
+    const bmp = await createImageBitmap(await src.convertToBlob({ type: 'image/jpeg', quality: d.jpeg }));
+    const out = new OffscreenCanvas(w, h).getContext('2d', { willReadFrequently: true });
+    out.drawImage(bmp, 0, 0);
+    return out.getImageData(0, 0, w, h);
+  }
+
+  let refCanvas = render(TILE_CODES, { tileH: 84, gap: 2 });
+  // refPhoto=1: 基準も写真らしく撮ったものにする（アプリで利用者が自分の牌を撮って登録するのに近い）
+  if (params.get('refPhoto')) {
+    refCanvas = photoize(refCanvas, { persp: 0.03, margin: 0.03, tilt: 0.5, desk: '#8a6a48', vignette: 0.15, lightLeft: true, shadow: null }, (() => { let q = 99; return () => ((q = (q * 1664525 + 1013904223) >>> 0) / 4294967296); })());
+  }
+  const refImg = refCanvas.getContext('2d').getImageData(0, 0, refCanvas.width, refCanvas.height);
+  if (params.get('style') === 'B') useStyle('B');
+
+  const cases = [];
+  for (let t = 0; t < N; t++) {
+    const len = rand() < 0.5 ? 13 : 14;
+    const codes = Array.from({ length: len }, () => pick(TILE_CODES));
+    const tileH = Math.round(between(34, 130));
+    const o = {
+      tileH,
+      gap: pick([0, 0, 1, 2, 3]),
+      tsumoGap: len === 14 && rand() < 0.5 ? Math.round(tileH * 0.3) : 0,
+      pad: Math.round(between(4, 40)),
+      bg: pick(['#2f6b4f', '#1d3b5c', '#3a2a1e', '#20402e']),
+    };
+    const d = {
+      blur: rand() < 0.5 ? between(0.55, 0.9) : 1,
+      bright: between(0.8, 1.12),
+      tint: [between(0.93, 1.07), between(0.93, 1.07), between(0.93, 1.07)],
+      noise: between(0, 14),
+      jpeg: rand() < JPEG ? between(0.5, 0.9) : 0,
+    };
+    let canvas = render(codes, o);
+    if (PHOTO && rand() < PHOTO) { // PHOTO=0 のときは乱数を消費しない（以前の結果を再現できるように）
+      d.photo = {
+        persp: between(0, 0.08),
+        margin: between(0.02, 0.08),
+        tilt: between(-TILT, TILT),
+        desk: pick(['#6b4a2e', '#8a6a48', '#2e5d3e', '#3b3f45', '#9c8f7c', '#b5a58a']),
+        vignette: between(0.05, 0.35),
+        lightLeft: rand() < 0.5,
+        shadow: rand() < 0.5 ? { at: between(0, 0.8), width: between(0.1, 0.4), depth: between(0.15, 0.4) } : null,
+      };
+      const fx = EFFECTS;
+      if (!fx.includes('persp')) d.photo.persp = 0;
+      if (!fx.includes('tilt')) d.photo.tilt = 0;
+      if (!fx.includes('light')) d.photo.vignette = 0;
+      if (!fx.includes('shadow')) d.photo.shadow = null;
+      if (!fx.includes('drop')) d.photo.noDrop = true;
+      canvas = photoize(canvas, d.photo, rand);
+    }
+    cases.push({ codes, img: await degrade(canvas, d), o, d });
+  }
+
+  const results = {};
+  for (const v of variants) {
+    const reader = (v.old ? createOld : createReader)(v.opts);
+    if (!v.noRefs) reader.addReferenceRow(refImg, TILE_CODES);
+    let tiles = 0, ok = 0, perfect = 0, countOk = 0, errs = 0, unread = 0, wrongFlagged = 0, wrongTotal = 0;
+    const confusion = {};
+    const by = {};
+    const t0 = performance.now();
+    for (const cs of cases) {
+      let r;
+      try { r = reader.readHand(cs.img, KNOWN ? { count: cs.codes.length } : {}); } catch (e) { errs++; continue; }
+      if (r.codes.length !== cs.codes.length) continue;
+      countOk++;
+      let all = true;
+      const key = (cs.d.photo ? '写真 ' : '') + (cs.o.tileH < 50 ? '小(34-49px)' : '中以上') + (cs.d.jpeg ? '+JPEG' : '');
+      by[key] ??= [0, 0];
+      cs.codes.forEach((c, i) => {
+        tiles++;
+        by[key][1]++;
+        if (r.codes[i] === c) { ok++; by[key][0]++; }
+        else if (!r.codes[i]) { all = false; unread++; }
+        else {
+          all = false; wrongTotal++; if (r.uncertain.includes(i)) wrongFlagged++;
+          const k = `${c}→${r.codes[i]}`; confusion[k] = (confusion[k] || 0) + 1;
+          const t = r.tiles[i];
+          if (t.rule && t.rule.code === r.codes[i]) { window.why ??= {}; const kk = k + ' ' + t.rule.reason; window.why[kk] = (window.why[kk] || 0) + 1; }
+          if (r.codes[i] === '5z' && params.get('debug')) {
+            const b = r.layout.boxes[i];
+            (window.debug ??= []).push({ k, i, n: cs.codes.length, tileH: cs.o.tileH, gap: cs.o.gap, tsumoGap: cs.o.tsumoGap, blur: +cs.d.blur.toFixed(2), jpeg: +cs.d.jpeg.toFixed(2), method: r.layout.method, box: b, face: r.tiles[i].faceBox, tileW: +r.layout.tileWidth.toFixed(1), segs: r.layout.segments.map((g) => g.w + ':' + g.tiles).join(' '), photo: cs.d.photo, rect: r.rectified, size: cs.img.width + 'x' + cs.img.height, band: r.layout.band });
+          }
+        }
+      });
+      if (all) perfect++;
+    }
+    results[v.name] = {
+      tileAccuracy: +(ok / tiles).toFixed(4),
+      unread: +(unread / tiles).toFixed(4),
+      wrong: +(wrongTotal / tiles).toFixed(4),
+      wrongFlagged: wrongTotal ? +(wrongFlagged / wrongTotal).toFixed(3) : null,
+      perfectHands: +(perfect / cases.length).toFixed(4),
+      countAccuracy: +(countOk / cases.length).toFixed(4),
+      errors: errs,
+      msPerHand: +((performance.now() - t0) / cases.length).toFixed(1),
+      by: Object.fromEntries(Object.entries(by).sort().map(([k, [a, n]]) => [k, +(a / n).toFixed(4)])),
+      topConfusions: Object.entries(confusion).sort((a, b) => b[1] - a[1]).slice(0, 8),
+    };
+  }
+  window.results = results;
+  window.debugInfo = window.debug || [];
+  window.whyList = Object.entries(window.why || {}).sort((a, b) => b[1] - a[1]).slice(0, 12);
+</script>

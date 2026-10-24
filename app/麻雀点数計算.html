@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>麻雀点数計算</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f261d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="麻雀点数">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@600;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  --bg:#dde7d9; --text:#15281f; --sub:#4d6357;
+  --tile:#fbf6e6; --tile-ink:#15281f; --tile-line:#d9cfae; --tile-edge:#b3a77c;
+  --accent:#b8351f; --accent-edge:#7a200f; --on-accent:#fff6e8;
+  --rule:#b9c8b4; --err:#a3271a;
+  --mincho:"Shippori Mincho B1","Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif;
+  --sans:"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f261d; --text:#eee7d2; --sub:#a4bba9;
+    --tile:#f3ecd6; --tile-line:#cfc39c; --tile-edge:#857b58;
+    --rule:#2c4a3b; --err:#ff9a80;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f261d; --text:#eee7d2; --sub:#a4bba9;
+  --tile:#f3ecd6; --tile-line:#cfc39c; --tile-edge:#857b58;
+  --rule:#2c4a3b; --err:#ff9a80;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px);-webkit-text-size-adjust:100%}
+*,*::before,*::after{box-sizing:inherit}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:var(--sans); font-size:16px; line-height:1.5;
+  padding-bottom:210px;
+  -webkit-tap-highlight-color:transparent;
+}
+.app{max-width:520px;margin:0 auto;padding:18px 16px 0}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:14px}
+h1{margin:0;font-family:var(--mincho);font-weight:800;font-size:28px;letter-spacing:.06em}
+.tabs{display:flex;gap:8px;margin-bottom:6px}
+.tabs .chip{flex:1;font-family:var(--sans);font-size:14px;padding:10px 0}
+h2{margin:22px 0 8px;font-size:14px;font-weight:600;color:var(--sub);letter-spacing:.04em}
+.note{margin:8px 0 0;font-size:13px;color:var(--sub)}
+.err{color:var(--err)}
+.grid{display:grid;gap:9px}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+.g5{grid-template-columns:repeat(5,1fr)}
+.g6{grid-template-columns:repeat(6,1fr)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+
+.chip{
+  appearance:none;-webkit-appearance:none;cursor:pointer;
+  background:var(--tile);color:var(--tile-ink);
+  border:1px solid var(--tile-line);border-radius:9px;
+  box-shadow:0 3px 0 var(--tile-edge);
+  font-family:var(--mincho);font-weight:800;font-size:19px;line-height:1.2;
+  padding:11px 2px;min-height:46px;
+  transition:transform .06s,box-shadow .06s;
+  display:block;text-align:center;
+}
+.chip small{display:block;font-family:var(--sans);font-weight:500;font-size:10.5px;margin-top:2px;opacity:.75}
+.chip:active{transform:translateY(2px);box-shadow:0 1px 0 var(--tile-edge)}
+.chip[aria-pressed="true"]{
+  background:var(--accent);color:var(--on-accent);border-color:var(--accent-edge);
+  box-shadow:0 1px 0 var(--accent-edge);transform:translateY(2px);
+}
+.chip:focus-visible,.step button:focus-visible,.link:focus-visible,.tile:focus-visible,.meld:focus-visible{outline:3px solid #e2b93b;outline-offset:2px}
+.chip.wide{font-family:var(--sans);font-weight:600;font-size:14.5px}
+.chip.big{font-size:16px;padding:16px 8px;width:100%}
+.dim{opacity:.45}
+.vh{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none}
+label.chip:focus-within{outline:3px solid #e2b93b;outline-offset:2px}
+
+.step{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  border-bottom:1px solid var(--rule);padding:6px 0}
+.step .lbl{font-size:14px;line-height:1.3}
+.step .lbl b{font-weight:600}
+.step .lbl span{display:block;font-size:12px;color:var(--sub)}
+.step .ctl{display:flex;align-items:center;gap:6px;flex:none}
+.step button{
+  width:38px;height:38px;border-radius:9px;cursor:pointer;
+  background:var(--tile);color:var(--tile-ink);border:1px solid var(--tile-line);
+  box-shadow:0 2px 0 var(--tile-edge);font:800 20px/1 var(--mincho);padding:0;
+}
+.step button:active{transform:translateY(1px);box-shadow:0 1px 0 var(--tile-edge)}
+.step .val{min-width:26px;text-align:center;font:800 20px var(--mincho)}
+.step.big{border:0;padding:0}
+.stack{display:flex;flex-direction:column;gap:8px}
+.box{display:flex;flex-direction:column;gap:6px}
+.box .lbl{font-size:14px;font-weight:600}
+.link{background:none;border:0;color:var(--sub);text-decoration:underline;font:inherit;font-size:13px;cursor:pointer;padding:12px 0}
+
+/* tiles */
+.tile{
+  appearance:none;-webkit-appearance:none;cursor:pointer;
+  display:inline-flex;flex-direction:column;align-items:center;justify-content:center;
+  width:34px;height:48px;padding:0;border-radius:6px;
+  background:var(--tile);border:1px solid var(--tile-line);box-shadow:0 3px 0 var(--tile-edge);
+  font-family:var(--mincho);font-weight:800;color:#15281f;line-height:1;
+}
+span.tile{cursor:inherit}
+.tile .n{font-size:20px}
+.tile .su{font-size:11px;margin-top:3px}
+.tile.k0 .su{color:#b8351f}
+.tile.k1 .n,.tile.k1 .su{color:#1f5fa8}
+.tile.k2 .n,.tile.k2 .su{color:#1f7a3a}
+.tile.k3 .n{font-size:22px}
+.tile.h5{box-shadow:0 3px 0 var(--tile-edge),inset 0 0 0 3px #d7d3c2}
+.tile.h6 .n{color:#1f7a3a}
+.tile.h7 .n{color:#b8351f}
+.tile.r{border-color:#d0281a}
+.tile.r .n{color:#d0281a}
+.tile.sm{width:28px;height:40px}
+.tile.sm .n{font-size:17px}.tile.sm .su{font-size:9px;margin-top:2px}
+.tile:active{transform:translateY(2px);box-shadow:0 1px 0 var(--tile-edge)}
+span.tile:active{transform:none;box-shadow:0 3px 0 var(--tile-edge)}
+.pal{display:grid;grid-template-columns:repeat(9,1fr);gap:6px;margin-top:8px}
+.pal .tile{width:100%;height:52px}
+.tiles{display:flex;flex-wrap:wrap;gap:6px;flex:1}
+.hrow{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--rule)}
+.hl{width:64px;flex:none;font-size:12px;color:var(--sub);padding-top:8px}
+.ph{font-size:13px;color:var(--sub);padding-top:7px}
+.meld{appearance:none;-webkit-appearance:none;background:none;border:0;padding:0;cursor:pointer;color:var(--text);display:flex;flex-direction:column;gap:2px;align-items:flex-start;font:inherit}
+.meld .ml{font-size:11px;color:var(--sub)}
+.meld .mt{display:flex;gap:3px}
+.melds{display:flex;flex-wrap:wrap;gap:12px;flex:1}
+.thumb{display:block;max-width:100%;max-height:170px;border-radius:10px;margin-top:10px;border:1px solid var(--rule)}
+.mode{margin-top:0}
+
+.plaque{
+  position:fixed;left:0;right:0;bottom:0;z-index:5;
+  padding:0 12px calc(12px + env(safe-area-inset-bottom,0px));
+  pointer-events:none;
+}
+.plaque .in{
+  pointer-events:auto;max-width:520px;margin:0 auto;
+  background:var(--tile);color:var(--tile-ink);
+  border:1px solid var(--tile-line);border-radius:18px;
+  box-shadow:0 6px 0 var(--tile-edge),0 14px 30px rgba(0,0,0,.28);
+  padding:14px 18px 14px;
+}
+.plaque .top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.plaque .name{font:800 22px var(--mincho);letter-spacing:.05em}
+.plaque .meta{font-size:12.5px;color:#4d5a4d}
+.plaque .pay{font:800 38px/1.1 var(--mincho);color:#b8351f;margin-top:4px;font-variant-numeric:tabular-nums}
+.plaque .pay small{font-size:17px;margin-left:2px}
+.plaque .sub{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:#33422f;margin-top:2px}
+.plaque .cta{margin-top:10px;width:100%;font-family:var(--sans);font-size:15px;font-weight:700}
+
+.fu-list{margin:6px 0 0;padding:0;list-style:none;font-size:14px}
+.fu-list li{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--rule)}
+.fu-list li:last-child{border:0}
+.fu-list li.sum{font-weight:700}
+/* 読み取り結果 */
+.tile.unc{background:#ffe7a3;border-color:#c98f00;box-shadow:0 3px 0 #a87600}
+.tile.ai{background:#d9e6ff;border-color:#3f6fc4;box-shadow:0 3px 0 #2f5597}
+.tile.q .n{color:#a87600}
+.tile.sel{outline:3px solid var(--accent);outline-offset:2px}
+.rd{display:flex;flex-wrap:wrap;gap:6px 4px;padding:10px 0;border-bottom:1px solid var(--rule)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--sub);margin-top:6px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:4px;border:1px solid}
+.legend .lu{background:#ffe7a3;border-color:#c98f00}.legend .la{background:#d9e6ff;border-color:#3f6fc4}
+.sub2{margin-top:9px}
+.fixbar{display:flex;gap:9px;margin-top:9px}
+.fixbar .chip{flex:1}
+.reg{margin-top:22px;border-top:1px solid var(--rule);padding-top:4px}
+.reg summary{cursor:pointer;font-size:14px;font-weight:600;color:var(--sub);padding:10px 0;letter-spacing:.04em}
+.greg{padding:10px 0;border-bottom:1px solid var(--rule)}
+.greg .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.greg .nm{font-size:14px;font-weight:600}
+.greg .st{font-size:12px;color:var(--sub)}
+.greg .st.ok{color:#1f7a3a}
+.greg .row{display:flex;gap:3px;margin:8px 0}
+.greg .btns{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.greg .btns .chip,.sub2 .chip{display:flex;align-items:center;justify-content:center}
+.greg img{display:block;max-width:100%;border-radius:8px;margin-top:8px;border:1px solid var(--rule)}
+/* 撮影・切り取り（全画面） */
+.cam{position:fixed;inset:0;z-index:20;background:#000;color:#fff;display:flex;flex-direction:column}
+.cam[hidden]{display:none}
+.cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.cam .shade{position:absolute;border:2px solid #ffd54a;border-radius:8px;box-shadow:0 0 0 100vmax rgba(0,0,0,.55)}
+.cam .tip{position:relative;margin:calc(14px + env(safe-area-inset-top,0px)) 16px 0;text-align:center;font-size:15px;line-height:1.4;text-shadow:0 1px 3px #000}
+.cam .bar{position:absolute;left:0;right:0;bottom:0;display:flex;gap:10px;padding:16px 16px calc(18px + env(safe-area-inset-bottom,0px))}
+.cam .bar .chip{flex:1}
+.cam .crop{position:relative;flex:1;display:flex;align-items:center;justify-content:center;padding:12px 8px 96px;min-height:0}
+.cam .crop img{max-width:100%;max-height:100%;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.cam .mk{position:absolute;width:22px;height:22px;margin:-11px 0 0 -11px;border:3px solid #ffd54a;border-radius:50%;pointer-events:none}
+@media (prefers-reduced-motion: reduce){.chip,.tile{transition:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header><h1>麻雀点数計算</h1></header>
+  <div class="tabs" role="tablist">
+    <button class="chip wide" role="tab" data-a="tab" data-v="photo" id="t-photo">写真で計算</button>
+    <button class="chip wide" role="tab" data-a="tab" data-v="score" id="t-score">点数表</button>
+    <button class="chip wide" role="tab" data-a="tab" data-v="fu" id="t-fu">符計算</button>
+  </div>
+  <main id="view"></main>
+</div>
+<div class="plaque" id="plaque"></div>
+<div class="cam" id="cam" hidden>
+  <video id="camv" playsinline muted autoplay></video>
+  <div class="shade" id="camf"></div>
+  <p class="tip" id="camtip"></p>
+  <div class="bar"><button class="chip wide" data-cam="close">やめる</button><button class="chip wide" data-cam="shot" style="background:var(--accent);color:var(--on-accent);border-color:var(--accent-edge)">撮る</button></div>
+</div>
+<div class="cam" id="crop" hidden>
+  <p class="tip" id="croptip"></p>
+  <div class="crop"><img id="cropimg" alt="選んだ写真"></div>
+  <div class="bar"><button class="chip wide" data-cam="close">やめる</button><button class="chip wide" data-cam="redo">やり直す</button></div>
+</div>
+
+<script>
+(function(){
+  var KEY='mj-calc-v2';
+  var HON=['東','南','西','北','白','發','中'];
+  var FRESH_HAND=function(){return {tiles:[],win:null,melds:[],dora:[],ura:[]};};
+  var DEF={tab:'photo',dealer:false,tsumo:false,han:3,fu:30,honba:0,riichi:0,kiriage:false,
+    agari:'tsumo',form:'normal',pair:0,wait:0,
+    m:{minkoC:0,minkoY:0,ankoC:0,ankoY:0,minkanC:0,minkanY:0,ankanC:0,ankanY:0},
+    hand:FRESH_HAND(),read:null,mode:'hand',seat:1,round:0,rch:0,ippatsu:false,haitei:false,rinshan:false,chankan:false,tenchi:false};
+  var s=JSON.parse(JSON.stringify(DEF));
+  try{
+    var raw=localStorage.getItem(KEY);
+    if(raw){var p=JSON.parse(raw);s=Object.assign({},DEF,p);s.m=Object.assign({},DEF.m,p.m||{});s.hand=Object.assign(FRESH_HAND(),p.hand||{});}
+  }catch(e){}
+  function save(){try{localStorage.setItem(KEY,JSON.stringify(s));}catch(e){}}
+
+  var msg='';
+  // 写真の読み取りの途中経過（保存しない）
+  var ph={stage:'',err:'',notes:'',thumb:'',ctl:null};
+
+  var HAN=[1,2,3,4,5,6,7,8,9,10,11,12,13,26,39];
+  var HANLBL={13:'13+',26:'W',39:'T'};
+  var HANSUB={5:'満貫',6:'跳満',8:'倍満',11:'三倍満',13:'役満',26:'ダブル役満',39:'トリプル役満'};
+  var FU=[20,25,30,40,50,60,70,80,90,100,110];
+  var MEN=[
+    ['minkoC','明刻','中張牌',2],['minkoY','明刻','幺九牌',4],
+    ['ankoC','暗刻','中張牌',4],['ankoY','暗刻','幺九牌',8],
+    ['minkanC','明槓','中張牌',8],['minkanY','明槓','幺九牌',16],
+    ['ankanC','暗槓','中張牌',16],['ankanY','暗槓','幺九牌',32]];
+
+  var fmt=function(n){return n.toLocaleString('ja-JP');};
+  var c100=function(x){return Math.ceil(x/100)*100;};
+  var esc=function(t){return String(t).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});};
+
+  /* ================= 点数 ================= */
+  function pay(o){
+    var han=o.han||0,fu=o.fu||0,ym=o.yakuman||0,base,name,limit=false;
+    if(ym){base=8000*ym;name=['','役満','ダブル役満','トリプル役満','四倍役満'][ym]||(ym+'倍役満');limit=true;}
+    else if(han>=13){base=8000;name=o.kazoe?'数え役満':'役満';limit=true;}
+    else if(han>=11){base=6000;name='三倍満';limit=true;}
+    else if(han>=8){base=4000;name='倍満';limit=true;}
+    else if(han>=6){base=3000;name='跳満';limit=true;}
+    else{
+      base=fu*Math.pow(2,han+2);
+      if(o.kiriage&&base===1920)base=2000;
+      if(base>=2000){base=2000;name='満貫';limit=true;}
+      else name=fu+'符'+han+'翻';
+    }
+    var h=o.honba||0,r={name:name,limit:limit,base:base};
+    if(!o.tsumo){
+      var v=c100(base*(o.dealer?6:4))+300*h;
+      r.main=fmt(v);r.unit='点';r.total=v;r.detail='ロン';
+    }else if(o.dealer){
+      var e=c100(base*2)+100*h;
+      r.main=fmt(e);r.unit='オール';r.total=e*3;r.detail='各 '+fmt(e)+'点';
+    }else{
+      var oy=c100(base*2)+100*h,k=c100(base)+100*h;
+      r.main=fmt(k)+'・'+fmt(oy);r.unit='';r.total=oy+2*k;r.detail='子 '+fmt(k)+' / 親 '+fmt(oy);
+    }
+    r.win=r.total+1000*(o.sticks||0);
+    return r;
+  }
+  function score(){
+    return pay({han:s.han>=13?13:s.han,fu:s.fu,dealer:s.dealer,tsumo:s.tsumo,honba:s.honba,kiriage:s.kiriage,
+      yakuman:s.han>=13?Math.floor(s.han/13):0,sticks:s.riichi});
+  }
+
+  /* ================= 牌ユーティリティ ================= */
+  function parseTile(t){
+    var m=/^([0-9])([mpsz])$/.exec(t||'');if(!m)return null;
+    var n=+m[1],k=m[2];
+    if(k==='z'){if(n<1||n>7)return null;return {i:26+n,red:false};}
+    var red=n===0;if(red)n=5;
+    if(n<1)return null;
+    return {i:({m:0,p:9,s:18})[k]+n-1,red:red};
+  }
+  function tileCode(i,red){
+    if(i>=27)return (i-26)+'z';
+    return (red?0:(i%9+1))+['m','p','s'][Math.floor(i/9)];
+  }
+  function cmpCode(a,b){var pa=parseTile(a),pb=parseTile(b);return (pa.i*2+(pa.red?0:1))-(pb.i*2+(pb.red?0:1));}
+  var isTerm=function(i){return i<27&&(i%9===0||i%9===8);};
+  var isYao=function(i){return i>=27||isTerm(i);};
+  function doraTarget(i){
+    if(i<27)return Math.floor(i/9)*9+(i%9+1)%9;
+    if(i<31)return 27+(i-27+1)%4;
+    return 31+(i-31+1)%3;
+  }
+
+  /* ================= 面子分解 ================= */
+  function walk(c,start,cur,n,out){
+    var i=start;while(i<34&&c[i]===0)i++;
+    if(i>=34){if(cur.length===n)out.push(cur.slice());return;}
+    if(cur.length>=n)return;
+    if(c[i]>=3){c[i]-=3;cur.push({k:'K',t:i});walk(c,i,cur,n,out);cur.pop();c[i]+=3;}
+    if(i<27&&i%9<=6&&c[i+1]>0&&c[i+2]>0){
+      c[i]--;c[i+1]--;c[i+2]--;cur.push({k:'S',t:i});walk(c,i,cur,n,out);cur.pop();c[i]++;c[i+1]++;c[i+2]++;
+    }
+  }
+  function decompose(c,nSets){
+    var res=[];
+    for(var p=0;p<34;p++){
+      if(c[p]>=2){
+        c[p]-=2;
+        var out=[];walk(c,0,[],nSets,out);
+        c[p]+=2;
+        out.forEach(function(sets){res.push({pair:p,sets:sets});});
+      }
+    }
+    return res;
+  }
+  function placements(D,w,ctx){
+    var out=[];
+    if(D.pair===w)out.push({sets:D.sets.map(function(x){return {k:x.k,t:x.t,open:false};}),wait:'tanki'});
+    D.sets.forEach(function(x,i){
+      var wait=null,openIdx=-1;
+      if(x.k==='K'&&x.t===w){wait='shanpon';openIdx=i;}
+      else if(x.k==='S'&&w>=x.t&&w<=x.t+2){
+        var pos=w-x.t;
+        wait=pos===1?'kanchan':(((pos===0&&x.t%9===6)||(pos===2&&x.t%9===0))?'penchan':'ryanmen');
+      }
+      if(wait){
+        out.push({sets:D.sets.map(function(y,j){return {k:y.k,t:y.t,open:(j===openIdx&&!ctx.tsumo)};}),wait:wait});
+      }
+    });
+    return out;
+  }
+
+  /* ================= 役判定 ================= */
+  function situational(ctx,menzen){
+    var y=[];
+    if(menzen&&ctx.riichi){
+      y.push([ctx.riichi===2?'ダブルリーチ':'リーチ',ctx.riichi===2?2:1]);
+      if(ctx.ippatsu)y.push(['一発',1]);
+    }
+    if(menzen&&ctx.tsumo)y.push(['門前清自摸和',1]);
+    if(ctx.haitei)y.push([ctx.tsumo?'海底摸月':'河底撈魚',1]);
+    if(ctx.rinshan)y.push(['嶺上開花',1]);
+    if(ctx.chankan)y.push(['槍槓',1]);
+    return y;
+  }
+  function suitYaku(all,menzen,y){
+    var suits={},hasH=false;
+    all.forEach(function(i){if(i>=27)hasH=true;else suits[Math.floor(i/9)]=1;});
+    if(Object.keys(suits).length===1){
+      if(hasH)y.push(['混一色',menzen?3:2]);else y.push(['清一色',menzen?6:5]);
+    }
+  }
+  function evalStd(sets,pair,wait,ctx){
+    var menzen=ctx.menzen,tsumo=ctx.tsumo;
+    var all=[];
+    sets.forEach(function(x){
+      if(x.k==='S')all.push(x.t,x.t+1,x.t+2);
+      else if(x.k==='K')all.push(x.t,x.t,x.t);
+      else all.push(x.t,x.t,x.t,x.t);
+    });
+    all.push(pair,pair);
+    var nQ=sets.filter(function(x){return x.k==='Q';}).length;
+    var nKK=sets.filter(function(x){return x.k!=='S';}).length;
+    var conc=sets.filter(function(x){return x.k!=='S'&&!x.open;}).length;
+    var allYao=all.every(isYao);
+    var noYao=all.every(function(i){return !isYao(i);});
+    var allHon=all.every(function(i){return i>=27;});
+    var allTerm=all.every(function(i){return i<27&&isTerm(i);});
+    var green=all.every(function(i){return [19,20,21,23,25,32].indexOf(i)>=0;});
+    var dragons=sets.filter(function(x){return x.k!=='S'&&x.t>=31;}).length;
+    var winds=sets.filter(function(x){return x.k!=='S'&&x.t>=27&&x.t<=30;}).length;
+    var ym=[];
+    if(menzen&&conc===4)ym.push([wait==='tanki'?'四暗刻単騎':'四暗刻',wait==='tanki'?2:1]);
+    if(dragons===3)ym.push(['大三元',1]);
+    if(winds===4)ym.push(['大四喜',2]);
+    else if(winds===3&&pair>=27&&pair<=30)ym.push(['小四喜',1]);
+    if(allHon)ym.push(['字一色',1]);
+    if(allTerm)ym.push(['清老頭',1]);
+    if(green)ym.push(['緑一色',1]);
+    if(nQ===4)ym.push(['四槓子',1]);
+    if(ym.length)return {ym:ym,y:[]};
+
+    var y=situational(ctx,menzen);
+    if(noYao)y.push(['断幺九',1]);
+    var isYakuPair=pair>=31||pair===ctx.round||pair===ctx.seat;
+    var allS=sets.every(function(x){return x.k==='S';});
+    if(menzen&&allS&&!isYakuPair&&wait==='ryanmen')y.push(['平和',1]);
+    if(menzen){
+      var cnt={},pk=0;
+      sets.forEach(function(x){if(x.k==='S')cnt[x.t]=(cnt[x.t]||0)+1;});
+      for(var k in cnt)pk+=Math.floor(cnt[k]/2);
+      if(pk>=2)y.push(['二盃口',3]);else if(pk===1)y.push(['一盃口',1]);
+    }
+    sets.forEach(function(x){
+      if(x.k==='S')return;
+      if(x.t>=31)y.push([HON[x.t-27],1]);
+      if(x.t>=27&&x.t<=30){
+        if(x.t===ctx.round)y.push(['場風 '+HON[x.t-27],1]);
+        if(x.t===ctx.seat)y.push(['自風 '+HON[x.t-27],1]);
+      }
+    });
+    var hasS=function(t){return sets.some(function(x){return x.k==='S'&&x.t===t;});};
+    var t,n;
+    for(t=0;t<7;t++)if(hasS(t)&&hasS(t+9)&&hasS(t+18)){y.push(['三色同順',menzen?2:1]);break;}
+    for(t=0;t<3;t++)if(hasS(t*9)&&hasS(t*9+3)&&hasS(t*9+6)){y.push(['一気通貫',menzen?2:1]);break;}
+    var hasSeq=sets.some(function(x){return x.k==='S';});
+    var setYao=sets.every(function(x){return x.k==='S'?(x.t%9===0||x.t%9===6):isYao(x.t);})&&isYao(pair);
+    if(setYao&&hasSeq){
+      if(all.some(function(i){return i>=27;}))y.push(['混全帯幺九',menzen?2:1]);
+      else y.push(['純全帯幺九',menzen?3:2]);
+    }
+    if(allYao&&!hasSeq)y.push(['混老頭',2]);
+    if(nKK===4)y.push(['対々和',2]);
+    if(conc===3)y.push(['三暗刻',2]);
+    for(n=0;n<9;n++){
+      var hk=function(tt){return sets.some(function(x){return x.k!=='S'&&x.t===tt;});};
+      if(hk(n)&&hk(n+9)&&hk(n+18)){y.push(['三色同刻',2]);break;}
+    }
+    if(nQ===3)y.push(['三槓子',2]);
+    if(dragons===2&&pair>=31)y.push(['小三元',2]);
+    suitYaku(all,menzen,y);
+    return {ym:[],y:y};
+  }
+  function calcFu(sets,pair,wait,ctx,y){
+    if(y.some(function(a){return a[0]==='平和';}))return ctx.tsumo?20:30;
+    var f=20;
+    if(ctx.menzen&&!ctx.tsumo)f+=10;
+    if(ctx.tsumo)f+=2;
+    sets.forEach(function(x){
+      if(x.k==='S')return;
+      var v=isYao(x.t)?(x.open?4:8):(x.open?2:4);
+      if(x.k==='Q')v*=4;
+      f+=v;
+    });
+    if(pair>=31)f+=2;
+    if(pair===ctx.round)f+=2;
+    if(pair===ctx.seat)f+=2;
+    if(wait==='kanchan'||wait==='penchan'||wait==='tanki')f+=2;
+    f=Math.ceil(f/10)*10;
+    if(f===20&&!ctx.tsumo)f=30;
+    return f;
+  }
+  function mkCand(ev,fu,ctx,dc){
+    var ym=ev.ym.slice();
+    if(ctx.tenchi)ym.push([ctx.dealer?'天和':'地和',1]);
+    var base={honba:ctx.honba,kiriage:ctx.kiriage,dealer:ctx.dealer,tsumo:ctx.tsumo,sticks:ctx.sticks};
+    if(ym.length){
+      var m=ym.reduce(function(a,b){return a+b[1];},0);
+      base.yakuman=m;
+      return {ym:ym,yaku:[],han:13*m,fu:0,r:pay(base)};
+    }
+    if(!ev.y.length)return null;
+    var y=ev.y.slice();
+    if(dc.dora)y.push(['ドラ',dc.dora]);
+    if(ctx.riichi&&dc.ura)y.push(['裏ドラ',dc.ura]);
+    if(dc.aka)y.push(['赤ドラ',dc.aka]);
+    var han=y.reduce(function(a,b){return a+b[1];},0);
+    base.han=Math.min(han,13);base.fu=fu;base.kazoe=han>=13;
+    return {ym:[],yaku:y,han:han,fu:fu,r:pay(base)};
+  }
+
+  var YAOCHU=[0,8,9,17,18,26,27,28,29,30,31,32,33];
+  function calcPhoto(){
+    var h=s.hand,m=h.melds.length,need=13-3*m;
+    if(!h.tiles.length&&!h.win&&!m)return {empty:true};
+    if(!h.win)return {err:'和了牌を1枚決めてください(「和了牌」を選んで牌をタップ)。'};
+    if(h.tiles.length!==need)return {err:'手牌は'+need+'枚+和了牌1枚が必要です(いま手牌'+h.tiles.length+'枚)。'};
+    var c=new Array(34).fill(0),cAll=new Array(34).fill(0),reds=0,melds=[],i;
+    h.tiles.concat([h.win]).forEach(function(t){var p=parseTile(t);c[p.i]++;cAll[p.i]++;if(p.red)reds++;});
+    h.melds.forEach(function(mm){
+      var idx=mm.tiles.map(function(t){var p=parseTile(t);cAll[p.i]++;if(p.red)reds++;return p.i;}).sort(function(a,b){return a-b;});
+      melds.push({k:mm.type==='chi'?'S':(mm.type==='pon'?'K':'Q'),t:idx[0],open:mm.type!=='ankan'});
+    });
+    for(i=0;i<34;i++)if(cAll[i]>4)return {err:'同じ牌が5枚以上あります。読み違いがないか確認してください。'};
+    var w=parseTile(h.win).i;
+    var menzen=melds.every(function(x){return !x.open;});
+    var ctx={tsumo:s.tsumo,menzen:menzen,round:27+s.round,seat:27+s.seat,dealer:s.seat===0,
+      riichi:menzen?s.rch:0,ippatsu:s.ippatsu,haitei:s.haitei,rinshan:s.rinshan&&s.tsumo,chankan:s.chankan&&!s.tsumo,
+      tenchi:s.tenchi&&s.tsumo&&menzen,honba:s.honba,kiriage:s.kiriage,sticks:s.riichi};
+    var dc={dora:0,ura:0,aka:reds};
+    h.dora.forEach(function(t){dc.dora+=cAll[doraTarget(parseTile(t).i)];});
+    if(ctx.riichi)h.ura.forEach(function(t){dc.ura+=cAll[doraTarget(parseTile(t).i)];});
+
+    var cands=[],shape=false,cd;
+    decompose(c.slice(),4-melds.length).forEach(function(D){
+      shape=true;
+      placements(D,w,ctx).forEach(function(pl){
+        var sets=pl.sets.concat(melds);
+        var ev=evalStd(sets,D.pair,pl.wait,ctx);
+        var fu=ev.ym.length?0:calcFu(sets,D.pair,pl.wait,ctx,ev.y);
+        cd=mkCand(ev,fu,ctx,dc);if(cd)cands.push(cd);
+      });
+    });
+    if(!melds.length){
+      var pairs=0,sevenOk=true;
+      for(i=0;i<34;i++){if(c[i]===2)pairs++;else if(c[i]!==0)sevenOk=false;}
+      if(sevenOk&&pairs===7){
+        shape=true;
+        var all7=[];for(i=0;i<34;i++)if(c[i]===2)all7.push(i,i);
+        var y7=situational(ctx,true),ym7=[];
+        if(all7.every(function(t){return t>=27;}))ym7.push(['字一色',1]);
+        else{
+          y7.push(['七対子',2]);
+          if(all7.every(function(t){return !isYao(t);}))y7.push(['断幺九',1]);
+          if(all7.every(isYao))y7.push(['混老頭',2]);
+          suitYaku(all7,true,y7);
+        }
+        cd=mkCand({ym:ym7,y:y7},25,ctx,dc);if(cd)cands.push(cd);
+      }
+      var kok=YAOCHU.every(function(t){return c[t]>=1;})&&YAOCHU.reduce(function(a,t){return a+c[t];},0)===14;
+      if(kok){
+        shape=true;
+        var wide=c[w]===2;
+        cd=mkCand({ym:[[wide?'国士無双十三面待ち':'国士無双',wide?2:1]],y:[]},0,ctx,dc);if(cd)cands.push(cd);
+      }
+      for(var su=0;su<3;su++){
+        var sl=c.slice(su*9,su*9+9),tot=sl.reduce(function(a,b){return a+b;},0);
+        if(tot===14&&sl[0]>=3&&sl[8]>=3&&sl.slice(1,8).every(function(x){return x>=1;})){
+          shape=true;
+          var pure=false;
+          if(Math.floor(w/9)===su){
+            var sl2=sl.slice();sl2[w%9]--;
+            pure=sl2[0]===3&&sl2[8]===3&&sl2.slice(1,8).every(function(x){return x===1;});
+          }
+          cd=mkCand({ym:[[pure?'純正九蓮宝燈':'九蓮宝燈',pure?2:1]],y:[]},0,ctx,dc);if(cd)cands.push(cd);
+        }
+      }
+    }
+    if(!cands.length){
+      return {err:shape?'役がありません(ドラだけでは和了できません)。リーチなどの状況を確認してください。'
+        :'和了形になっていません。4面子+雀頭、七対子、国士無双のいずれかになるよう、牌の読み取りを確認してください。'};
+    }
+    cands.sort(function(a,b){return b.r.total-a.r.total||b.han-a.han||b.fu-a.fu;});
+    return {best:cands[0],ctx:ctx};
+  }
+
+  /* ================= 符計算(手入力) ================= */
+  function fuCalc(){
+    var items=[],raw,fu;
+    if(s.form==='chiitoi')return {items:[['七対子(固定)',25]],raw:25,fu:25};
+    if(s.form==='pinfu'){
+      if(s.agari==='tsumo')return {items:[['平和ツモ(固定)',20]],raw:20,fu:20};
+      return {items:[['平和ロン(副底20+門前加符10)',30]],raw:30,fu:30};
+    }
+    raw=20;items.push(['副底',20]);
+    if(s.agari==='tsumo'){raw+=2;items.push(['ツモ',2]);}
+    if(s.agari==='menron'){raw+=10;items.push(['門前ロン',10]);}
+    MEN.forEach(function(m){
+      var n=s.m[m[0]];if(n>0){var v=m[3]*n;raw+=v;items.push([m[1]+' '+m[2]+' ×'+n,v]);}
+    });
+    if(s.pair){raw+=s.pair;items.push(['雀頭',s.pair]);}
+    if(s.wait){raw+=s.wait;items.push(['待ち(嵌張・辺張・単騎)',s.wait]);}
+    fu=Math.ceil(raw/10)*10;
+    if(fu===20&&s.agari!=='tsumo')fu=30;
+    return {items:items,raw:raw,fu:fu};
+  }
+
+  /* ================= 描画部品 ================= */
+  function chip(label,pressed,attrs,cls,sub){
+    return '<button class="chip '+(cls||'')+'" aria-pressed="'+(pressed?'true':'false')+'" '+attrs+'>'+label+(sub?'<small>'+sub+'</small>':'')+'</button>';
+  }
+  function stepper(label,sub,val,am,ap){
+    return '<div class="step"><div class="lbl"><b>'+label+'</b>'+(sub?'<span>'+sub+'</span>':'')+'</div><div class="ctl">'+
+      '<button aria-label="'+label+'を減らす" '+am+'>−</button><div class="val">'+val+'</div>'+
+      '<button aria-label="'+label+'を増やす" '+ap+'>＋</button></div></div>';
+  }
+  function tileHTML(code,cls,attrs,tag){
+    var p=parseTile(code);if(!p)return '';
+    var i=p.i,n,su='',k,label;
+    tag=tag||'button';
+    if(i>=27){k='k3 h'+(i-26);n=HON[i-27];label=n;}
+    else{k='k'+Math.floor(i/9);n=p.red?'5':(i%9+1);su=['萬','筒','索'][Math.floor(i/9)];label=(p.red?'赤':'')+n+su;}
+    return '<'+tag+(tag==='button'?' type="button"':'')+' class="tile '+k+(p.red?' r':'')+' '+(cls||'')+'" '+(attrs||'')+' aria-label="'+label+'"><span class="n">'+n+'</span>'+(su?'<span class="su">'+su+'</span>':'')+'</'+tag+'>';
+  }
+  function honbaBlock(){
+    return '<h2>本場・供託</h2><div class="row2">'+
+      '<div class="box"><div class="lbl">本場</div><div class="step big"><div class="ctl">'+
+        '<button aria-label="本場を減らす" data-a="honba" data-d="-1">−</button><div class="val">'+s.honba+'</div><button aria-label="本場を増やす" data-a="honba" data-d="1">＋</button></div></div></div>'+
+      '<div class="box"><div class="lbl">リーチ棒</div><div class="step big"><div class="ctl">'+
+        '<button aria-label="リーチ棒を減らす" data-a="riichi" data-d="-1">−</button><div class="val">'+s.riichi+'</div><button aria-label="リーチ棒を増やす" data-a="riichi" data-d="1">＋</button></div></div></div>'+
+      '</div>';
+  }
+
+  /* ================= 各タブ ================= */
+  function photoView(P){
+    var h=s.hand,m=h.melds.length,need=13-3*m,o='';
+    o+=photoTop();
+    o+='<h2>手牌</h2><div>';
+    o+='<div class="hrow"><div class="hl">手牌 '+h.tiles.length+'/'+need+'</div><div class="tiles">'+
+      (h.tiles.length?h.tiles.map(function(t,i){return tileHTML(t,'','data-a="rm" data-w="hand" data-i="'+i+'"');}).join(''):'<span class="ph">牌を追加してください</span>')+'</div></div>';
+    o+='<div class="hrow"><div class="hl">和了牌</div><div class="tiles">'+
+      (h.win?tileHTML(h.win,'','data-a="rm" data-w="win" data-i="0"'):'<span class="ph">未設定</span>')+'</div></div>';
+    if(m){
+      var names={chi:'チー',pon:'ポン',minkan:'明槓',ankan:'暗槓'};
+      o+='<div class="hrow"><div class="hl">副露</div><div class="melds">'+h.melds.map(function(mm,i){
+        return '<button class="meld" data-a="rm" data-w="meld" data-i="'+i+'" aria-label="'+names[mm.type]+'を削除"><span class="ml">'+names[mm.type]+'</span><span class="mt">'+
+          mm.tiles.map(function(t){return tileHTML(t,'sm','','span');}).join('')+'</span></button>';
+      }).join('')+'</div></div>';
+    }
+    o+='<div class="hrow"><div class="hl">ドラ表示</div><div class="tiles">'+
+      (h.dora.length?h.dora.map(function(t,i){return tileHTML(t,'sm','data-a="rm" data-w="dora" data-i="'+i+'"');}).join(''):'<span class="ph">なし</span>')+'</div></div>';
+    if(s.rch>0){
+      o+='<div class="hrow"><div class="hl">裏ドラ表示</div><div class="tiles">'+
+        (h.ura.length?h.ura.map(function(t,i){return tileHTML(t,'sm','data-a="rm" data-w="ura" data-i="'+i+'"');}).join(''):'<span class="ph">なし</span>')+'</div></div>';
+    }
+    o+='</div><p class="note">牌をタップすると消せます。</p>';
+
+    o+='<h2>判定</h2>'+resultView(P);
+
+    o+='<h2>牌を追加</h2><div class="grid g4 mode">'+
+      [['hand','手牌'],['win','和了牌'],['chi','チー'],['pon','ポン'],['minkan','明槓'],['ankan','暗槓'],['dora','ドラ表示'],['ura','裏ドラ']].map(function(x){
+        return chip(x[1],s.mode===x[0],'data-a="mode" data-v="'+x[0]+'"','wide');
+      }).join('')+'</div>';
+    o+='<p class="note">'+({hand:'手牌の牌を順にタップ。手牌がそろうと次は和了牌になります。',win:'和了った牌(ロンした牌・ツモった牌)をタップ。',
+      chi:'順子のいちばん小さい牌をタップ(例: 345なら3)。',pon:'ポンした牌をタップ。',minkan:'明槓した牌をタップ。',ankan:'暗槓した牌をタップ。',
+      dora:'ドラ表示牌をタップ。',ura:'裏ドラ表示牌をタップ(リーチ時のみ計算)。'})[s.mode]+'</p>';
+    o+=paletteHTML();
+    if(msg)o+='<p class="note err">'+esc(msg)+'</p>';
+    o+='<button class="link" data-a="clearhand">牌をすべて消す</button>';
+
+    o+='<h2>和了り方</h2><div class="grid g2">'+
+      chip('ロン',!s.tsumo,'data-a="tsumo" data-v="0"','wide')+chip('ツモ',s.tsumo,'data-a="tsumo" data-v="1"','wide')+'</div>';
+    o+='<h2>自風(東=親)</h2><div class="grid g4">'+[0,1,2,3].map(function(n){return chip(HON[n],s.seat===n,'data-a="seat" data-v="'+n+'"');}).join('')+'</div>';
+    o+='<h2>場風</h2><div class="grid g4">'+[0,1].map(function(n){return chip(HON[n],s.round===n,'data-a="round" data-v="'+n+'"');}).join('')+'</div>';
+    o+='<h2>リーチ</h2><div class="grid g3">'+
+      chip('なし',s.rch===0,'data-a="rch" data-v="0"','wide')+chip('リーチ',s.rch===1,'data-a="rch" data-v="1"','wide')+chip('ダブル',s.rch===2,'data-a="rch" data-v="2"','wide')+'</div>';
+    o+='<h2>状況の役</h2><div class="grid g2">'+
+      chip('一発',s.ippatsu,'data-a="flag" data-v="ippatsu"','wide')+
+      chip(s.tsumo?'海底摸月':'河底撈魚',s.haitei,'data-a="flag" data-v="haitei"','wide')+
+      chip('嶺上開花',s.rinshan,'data-a="flag" data-v="rinshan"','wide')+
+      chip('槍槓',s.chankan,'data-a="flag" data-v="chankan"','wide')+
+      chip('天和・地和',s.tenchi,'data-a="flag" data-v="tenchi"','wide')+'</div>';
+    o+=honbaBlock();
+    o+='<h2>ルール</h2><div class="grid">'+chip('切り上げ満貫(30符4翻・60符3翻を満貫に)',s.kiriage,'data-a="kiriage"','wide')+'</div>';
+    o+=refSection();
+    return o;
+  }
+
+  function paletteHTML(){
+    var o='<div class="pal">',n;
+    ['m','p','s'].forEach(function(k){
+      for(n=1;n<=9;n++)o+=tileHTML(n+k,'','data-a="pal" data-t="'+n+k+'"');
+    });
+    for(n=1;n<=7;n++)o+=tileHTML(n+'z','','data-a="pal" data-t="'+n+'z"');
+    o+='<span></span><span></span>';
+    ['0m','0p','0s'].forEach(function(t){o+=tileHTML(t,'','data-a="pal" data-t="'+t+'"');});
+    return o+'</div>';
+  }
+
+  function photoTop(){
+    var o='<h2>手牌の写真</h2>';
+    if(TR.state==='loading')return o+'<p class="note">読み取りの準備中…</p>';
+    if(TR.state==='error')return o+'<p class="note err">読み取り機能を読み込めませんでした。下の牌パレットで入力してください。</p>';
+    var busy=!!ph.ctl;
+    o+='<button class="chip wide big'+(busy?' dim':'')+'" data-a="cam" data-v="hand"'+(busy?' disabled':'')+'>📷 枠に合わせて撮る</button>';
+    o+='<div class="grid g2 sub2">'+pickBtn('hand',true,'カメラアプリで撮る',busy)+pickBtn('hand',false,'写真を選ぶ',busy)+'</div>';
+    if(ph.stage)o+='<p class="note">'+esc(ph.stage)+(busy?' <button class="link" data-a="cancel">AIをやめる</button>':'')+'</p>';
+    if(ph.err)o+='<p class="note err">'+esc(ph.err)+'</p>';
+    if(ph.thumb)o+='<img class="thumb" src="'+ph.thumb+'" alt="読み取った写真と、牌の切り分け">';
+    o+=readView();
+    if(ph.notes)o+='<p class="note">AIのメモ: '+esc(ph.notes)+'</p>';
+    if(!refCount())o+='<p class="note">自分の牌をまだ登録していないので、筒子・索子・一〜三萬・字牌の一部だけを読みます。いちばん下の「自分の牌を登録」で全種類を撮ると、ほかの牌も読めるようになります。</p>';
+    o+='<p class="note">和了牌はいちばん右に置いてください。鳴いた牌とドラ表示牌は写さず、下で入力します。</p>';
+    return o;
+  }
+  function pickBtn(purpose,capture,label,busy){
+    return '<label class="chip wide'+(busy?' dim':'')+'">'+label+'<input class="vh" type="file" accept="image/*" data-pick="'+purpose+'"'+(capture?' capture="environment"':'')+(busy?' disabled':'')+'></label>';
+  }
+  function readView(){
+    var R=s.read;if(!R)return '';
+    var o='<div class="rd" aria-label="読み取り結果">'+R.codes.map(function(c,i){
+      var cls=({unc:'unc',none:'unc',ai:'ai'})[R.flag[i]]||'';
+      if(R.sel===i)cls+=' sel';
+      var at='data-a="rsel" data-i="'+i+'"';
+      return c?tileHTML(c,cls,at):'<button type="button" class="tile q '+cls+'" '+at+' aria-label="'+(i+1)+'枚目 読めなかった牌"><span class="n">?</span></button>';
+    }).join('')+'</div>';
+    var left=R.flag.filter(function(f){return f==='unc'||f==='none'||f==='ai';}).length;
+    if(left)o+='<div class="legend"><span><i class="lu"></i>自信なし・読めず</span>'+(R.flag.indexOf('ai')>=0?'<span><i class="la"></i>AIが読んだ(念のため確認)</span>':'')+'</div>';
+    if(R.sel!=null){
+      o+='<p class="note">'+(R.sel+1)+'枚目('+(R.codes[R.sel]?'いまは '+tileName(R.codes[R.sel]):'読めず')+')を、正しい牌に選び直してください。</p>'+paletteHTML();
+      o+='<div class="fixbar">'+(R.codes[R.sel]?'<button class="chip wide" data-a="rok">この牌で合っている</button>':'')+'<button class="chip wide" data-a="rsel" data-i="-1">閉じる</button></div>';
+    }else if(left){
+      o+='<p class="note">色の付いた牌をタップして確かめてください(残り'+left+'枚)。ほかの牌もタップで直せます。</p>';
+    }
+    return o;
+  }
+  function tileName(c){
+    var p=parseTile(c);if(!p)return '';
+    return p.i>=27?HON[p.i-27]:(p.red?'赤':'')+(p.i%9+1)+['萬','筒','索'][Math.floor(p.i/9)];
+  }
+  function refSection(){
+    if(TR.state!=='ready')return '';
+    var n=refCount();
+    var open=TR.open==null?!n:TR.open;
+    var o='<details class="reg" id="reg"'+(open?' open':'')+'><summary>自分の牌を登録('+(n?GROUPS.filter(function(g){return TR.groups[g[0]];}).map(function(g){return g[1];}).join('・')+' 登録済み':'未登録')+')</summary>';
+    o+='<p class="note">お使いの牌を種類ごとに、下の順で左から横一列に並べて撮ります(牌どうしはくっつけてかまいません)。一度登録すれば、この端末に保存されて次から使えます。写真は端末の外に送りません。</p>';
+    GROUPS.forEach(function(g){
+      var k=g[0],ok=!!TR.groups[k];
+      o+='<div class="greg"><div class="top"><span class="nm">'+g[1]+'</span><span class="st'+(ok?' ok':'')+'">'+(ok?'登録済み':'未登録')+'</span></div>';
+      o+='<div class="row">'+g[2].replace(/[mpsz]/,'').split('').map(function(d){return tileHTML(d+g[2].slice(-1),'sm','','span');}).join('')+'</div>';
+      o+='<div class="btns"><button class="chip wide" data-a="cam" data-v="ref:'+k+'">📷 撮る</button>'+pickBtn('ref:'+k,false,'写真を選ぶ',false)+'</div>';
+      if(TR.msg[k])o+='<p class="note err">'+esc(TR.msg[k])+'</p>';
+      if(TR.preview[k])o+='<img src="'+TR.preview[k]+'" alt="'+g[1]+'の切り分け">';
+      o+='</div>';
+    });
+    if(TR.saveErr)o+='<p class="note err">この端末に保存できませんでした。ページを閉じると登録が消えます。</p>';
+    if(n)o+='<button class="link" data-a="refclear">'+(TR.sure?'もう一度押すと消します':'登録した基準を消す')+'</button>';
+    return o+'</details>';
+  }
+
+  function resultView(P){
+    if(P.empty)return '<p class="note">写真を読み取るか、下の牌パレットで手牌を入力してください。</p>';
+    if(P.err)return '<p class="note err">'+esc(P.err)+'</p>';
+    var b=P.best,o='<ul class="fu-list">';
+    if(b.ym.length){
+      b.ym.forEach(function(a){o+='<li><span>'+a[0]+'</span><span>'+(a[1]===1?'役満':a[1]===2?'ダブル役満':'トリプル役満')+'</span></li>';});
+      o+='<li class="sum"><span>合計</span><span>'+b.r.name+'</span></li>';
+    }else{
+      b.yaku.forEach(function(a){o+='<li><span>'+a[0]+'</span><span>'+a[1]+'翻</span></li>';});
+      o+='<li class="sum"><span>合計</span><span>'+b.han+'翻 '+b.fu+'符'+(b.r.limit?'('+b.r.name+')':'')+'</span></li>';
+    }
+    return o+'</ul>';
+  }
+
+  function scoreView(){
+    var h='';
+    h+='<h2>誰が和了った?</h2><div class="grid g2">'+
+      chip('子',!s.dealer,'data-a="dealer" data-v="0"')+chip('親',s.dealer,'data-a="dealer" data-v="1"')+'</div>';
+    h+='<h2>和了り方</h2><div class="grid g2">'+
+      chip('ロン',!s.tsumo,'data-a="tsumo" data-v="0"','wide')+chip('ツモ',s.tsumo,'data-a="tsumo" data-v="1"','wide')+'</div>';
+    h+='<h2>翻</h2><div class="grid g5">'+HAN.map(function(n){
+      return chip(HANLBL[n]||n,s.han===n,'data-a="han" data-v="'+n+'"','',HANSUB[n]||'');
+    }).join('')+'</div>';
+    h+='<h2>符</h2><div class="grid g6 '+(s.han>=5?'dim':'')+'">'+FU.map(function(n){
+      return chip(n,s.fu===n,'data-a="fu" data-v="'+n+'"');
+    }).join('')+'</div>';
+    h+='<p class="note">'+(s.han>=5?'5翻以上は符に関係なく満貫以上です。':'翻や符が分からないときは「写真で計算」か「符計算」を使ってください。')+'</p>';
+    h+=honbaBlock();
+    h+='<h2>ルール</h2><div class="grid">'+chip('切り上げ満貫(30符4翻・60符3翻を満貫に)',s.kiriage,'data-a="kiriage"','wide')+'</div>';
+    h+='<button class="link" data-a="reset">入力をリセット</button>';
+    return h;
+  }
+
+  function fuView(){
+    var h='';
+    h+='<h2>和了り方</h2><div class="grid g3">'+
+      chip('ツモ',s.agari==='tsumo','data-a="agari" data-v="tsumo"','wide')+
+      chip('門前ロン',s.agari==='menron','data-a="agari" data-v="menron"','wide')+
+      chip('鳴きロン',s.agari==='openron','data-a="agari" data-v="openron"','wide')+'</div>';
+    h+='<h2>特殊な形</h2><div class="grid g3">'+
+      chip('通常',s.form==='normal','data-a="form" data-v="normal"','wide')+
+      chip('平和',s.form==='pinfu','data-a="form" data-v="pinfu"','wide')+
+      chip('七対子',s.form==='chiitoi','data-a="form" data-v="chiitoi"','wide')+'</div>';
+    if(s.form==='normal'){
+      h+='<h2>面子(刻子・槓子)</h2><div class="stack">'+MEN.map(function(m){
+        return stepper(m[1]+' '+m[2],m[3]+'符',s.m[m[0]],'data-a="m" data-k="'+m[0]+'" data-d="-1"','data-a="m" data-k="'+m[0]+'" data-d="1"');
+      }).join('')+'</div>';
+      h+='<p class="note">順子は0符なので入力不要です。刻子・槓子は合計4つまで。</p>';
+      h+='<h2>雀頭</h2><div class="grid g3">'+
+        chip('0符',s.pair===0,'data-a="pair" data-v="0"','','役牌以外')+
+        chip('2符',s.pair===2,'data-a="pair" data-v="2"','','三元牌・場風・自風')+
+        chip('4符',s.pair===4,'data-a="pair" data-v="4"','','連風牌')+'</div>';
+      h+='<h2>待ち</h2><div class="grid g2">'+
+        chip('0符',s.wait===0,'data-a="wait" data-v="0"','','両面・シャンポン')+
+        chip('2符',s.wait===2,'data-a="wait" data-v="2"','','嵌張・辺張・単騎')+'</div>';
+    }else{
+      h+='<p class="note">'+(s.form==='pinfu'?'平和はツモ20符、ロン30符です。':'七対子は25符固定です。')+'</p>';
+    }
+    h+='<button class="link" data-a="reset">入力をリセット</button>';
+    return h;
+  }
+  function fuBreakdown(){
+    var f=fuCalc();
+    return '<ul class="fu-list">'+f.items.map(function(i){return '<li><span>'+i[0]+'</span><span>'+i[1]+'符</span></li>';}).join('')+'</ul>';
+  }
+
+  function plaqueScore(r,extra){
+    var meta=(s.seat===0&&s.tab==='photo'||s.dealer&&s.tab!=='photo'?'親':'子')+'・'+(s.tsumo?'ツモ':'ロン')+(s.honba?' '+s.honba+'本場':'')+(s.riichi?' 供託'+s.riichi:'');
+    return '<div class="in"><div class="top"><div class="name">'+r.name+'</div><div class="meta">'+meta+'</div></div>'+
+      '<div class="pay">'+r.main+'<small>'+r.unit+'</small></div>'+
+      '<div class="sub"><span>'+(s.tsumo?r.detail:'')+'</span><span>受取 '+fmt(r.win)+'点</span></div></div>';
+  }
+  function plaque(P){
+    if(s.tab==='photo'){
+      if(P&&P.best){var b=P.best;var r=b.r;
+        return plaqueScore(r);}
+      return '<div class="in"><div class="top"><div class="name">点数</div><div class="meta">手牌を入力すると表示されます</div></div><div class="pay">—</div></div>';
+    }
+    if(s.tab==='score')return plaqueScore(score());
+    var f=fuCalc();
+    var meta2=s.form==='normal'?'小計 '+f.raw+'符 → 切り上げ':'';
+    return '<div class="in"><div class="top"><div class="name">符計算</div><div class="meta">'+meta2+'</div></div>'+
+      '<div class="pay">'+f.fu+'<small>符</small></div>'+
+      '<button class="chip cta" data-a="usefu">この符で点数を見る</button></div>';
+  }
+
+  var view=document.getElementById('view'),pl=document.getElementById('plaque');
+  function render(){
+    ['photo','score','fu'].forEach(function(t){document.getElementById('t-'+t).setAttribute('aria-pressed',s.tab===t?'true':'false');});
+    var y=window.scrollY,P=null;
+    if(s.tab==='photo'){
+      try{P=calcPhoto();}catch(e){P={err:'計算中にエラーが出ました。牌の入力を確認してください。'};}
+      view.innerHTML=photoView(P);
+    }else if(s.tab==='score')view.innerHTML=scoreView();
+    else view.innerHTML=fuView()+'<h2>内訳</h2>'+fuBreakdown();
+    pl.innerHTML=plaque(P);
+    window.scrollTo(0,y);
+    save();
+  }
+  function totalMentsu(){var t=0;for(var k in s.m)t+=s.m[k];return t;}
+
+  /* ================= 牌入力 ================= */
+  function plain(i){return tileCode(i,false);}
+  function addMeld(type,tiles){
+    var h=s.hand,m=h.melds.length;
+    if(m>=4){msg='副露は4つまでです。';return;}
+    var need=13-3*(m+1);
+    if(h.tiles.length>need){msg='副露を足すには、手牌を'+need+'枚まで減らしてください(いま'+h.tiles.length+'枚)。';return;}
+    h.melds.push({type:type,tiles:tiles});
+  }
+  function addTile(code){
+    var h=s.hand,p=parseTile(code),need=13-3*h.melds.length;
+    switch(s.mode){
+      case 'hand':
+        if(h.tiles.length<need)h.tiles.push(code);
+        else if(!h.win)h.win=code;
+        else msg='手牌がいっぱいです。違う牌はタップで消してください。';
+        break;
+      case 'win':h.win=code;break;
+      case 'chi':
+        if(p.i>=27||p.i%9>6){msg='チーは、順子のいちばん小さい牌(1〜7)を選んでください。';break;}
+        addMeld('chi',[code,plain(p.i+1),plain(p.i+2)]);break;
+      case 'pon':addMeld('pon',[code,plain(p.i),plain(p.i)]);break;
+      case 'minkan':addMeld('minkan',[code,plain(p.i),plain(p.i),plain(p.i)]);break;
+      case 'ankan':addMeld('ankan',[code,plain(p.i),plain(p.i),plain(p.i)]);break;
+      case 'dora':if(h.dora.length<5)h.dora.push(code);break;
+      case 'ura':if(h.ura.length<5)h.ura.push(code);break;
+    }
+    h.tiles.sort(cmpCode);
+  }
+
+  /* ================= 操作 ================= */
+  document.addEventListener('click',function(e){
+    var b=e.target.closest('[data-a]');if(!b)return;
+    var a=b.dataset.a,v=b.dataset.v,d=parseInt(b.dataset.d||'0',10);
+    msg='';
+    if(a!=='refclear')TR.sure=false;
+    switch(a){
+      case 'tab':s.tab=v;window.scrollTo(0,0);break;
+      case 'dealer':s.dealer=v==='1';s.seat=s.dealer?0:(s.seat===0?1:s.seat);break;
+      case 'seat':s.seat=parseInt(v,10);s.dealer=s.seat===0;break;
+      case 'round':s.round=parseInt(v,10);break;
+      case 'rch':s.rch=parseInt(v,10);if(!s.rch)s.ippatsu=false;break;
+      case 'flag':s[v]=!s[v];break;
+      case 'tsumo':s.tsumo=v==='1';break;
+      case 'han':s.han=parseInt(v,10);break;
+      case 'fu':s.fu=parseInt(v,10);break;
+      case 'honba':s.honba=Math.max(0,Math.min(30,s.honba+d));break;
+      case 'riichi':s.riichi=Math.max(0,Math.min(8,s.riichi+d));break;
+      case 'kiriage':s.kiriage=!s.kiriage;break;
+      case 'agari':s.agari=v;break;
+      case 'form':s.form=v;break;
+      case 'pair':s.pair=parseInt(v,10);break;
+      case 'wait':s.wait=parseInt(v,10);break;
+      case 'm':
+        var k=b.dataset.k,n=s.m[k]+d;
+        if(n<0||n>4)break;
+        if(d>0&&totalMentsu()>=4)break;
+        s.m[k]=n;break;
+      case 'usefu':
+        s.fu=fuCalc().fu;s.tsumo=(s.agari==='tsumo');s.tab='score';window.scrollTo(0,0);break;
+      case 'reset':
+        var t=s.tab,hd=s.hand;s=JSON.parse(JSON.stringify(DEF));s.tab=t;s.hand=hd;break;
+      case 'mode':s.mode=v;break;
+      case 'pal':
+        if(s.read&&s.read.sel!=null)fixRead(b.dataset.t);
+        else addTile(b.dataset.t);
+        break;
+      case 'rsel':
+        var ri=parseInt(b.dataset.i,10);
+        s.read.sel=(ri<0||s.read.sel===ri)?null:ri;break;
+      case 'rok':
+        s.read.flag[s.read.sel]='ok';s.read.sel=nextOpen(s.read.sel);break;
+      case 'cam':openCamera(v);return;
+      case 'refclear':
+        if(!TR.sure){TR.sure=true;break;}
+        TR.sure=false;TR.groups={};TR.preview={};TR.msg={};saveRefs();rebuildReader();break;
+      case 'rm':
+        var w=b.dataset.w,i=parseInt(b.dataset.i,10),hh=s.hand;
+        if(w==='hand')hh.tiles.splice(i,1);
+        else if(w==='win')hh.win=null;
+        else if(w==='meld')hh.melds.splice(i,1);
+        else if(w==='dora')hh.dora.splice(i,1);
+        else if(w==='ura')hh.ura.splice(i,1);
+        break;
+      case 'clearhand':s.hand=FRESH_HAND();s.read=null;ph.notes='';ph.thumb='';ph.err='';break;
+      case 'cancel':if(ph.ctl)ph.ctl.abort();return;
+    }
+    render();
+  });
+
+  /* ================= 手牌リーダー(端末の中で読む) ================= */
+  var REFKEY='mj-refs-v1';
+  var GROUPS=[['m','萬子','123456789m'],['p','筒子','123456789p'],['s','索子','123456789s'],['z','字牌','1234567z']];
+  // groups: 種類ごとの基準(exportReferences の結果)。preview/msg: 登録時の切り分け画像・注意
+  var TR={state:'loading',lib:null,reader:null,groups:{},preview:{},msg:{},saveErr:false,open:null};
+  function refCount(){return Object.keys(TR.groups).length;}
+  function saveRefs(){
+    try{localStorage.setItem(REFKEY,JSON.stringify({groups:TR.groups}));TR.saveErr=false;}catch(e){TR.saveErr=true;}
+  }
+  function rebuildReader(){
+    TR.reader=TR.lib.createReader();
+    GROUPS.forEach(function(g){
+      if(!TR.groups[g[0]])return;
+      try{TR.reader.importReferences(TR.groups[g[0]],{append:true});}catch(e){delete TR.groups[g[0]];}
+    });
+  }
+  import('./mahjong-tile-reader.js').then(function(m){
+    TR.lib=m;
+    try{var raw=localStorage.getItem(REFKEY);if(raw)TR.groups=JSON.parse(raw).groups||{};}catch(e){TR.groups={};}
+    rebuildReader();
+    TR.state='ready';render();
+  }).catch(function(){TR.state='error';render();});
+
+  // 撮影枠の 縦/横。牌の表面は 横:縦 ≒ 3:4 なので、n 枚なら 1.33/n。上下に余白を足す
+  function frameRatio(n){return 1.33/n*1.45;}
+  function purposeCount(purpose){
+    if(purpose==='hand')return 14-3*s.hand.melds.length;
+    var g=GROUPS.filter(function(x){return 'ref:'+x[0]===purpose;})[0];
+    return g?g[2].length-1:14;
+  }
+  function purposeTip(purpose){
+    if(purpose==='hand')return '手牌を枠いっぱいに、横一列で合わせてください';
+    var g=GROUPS.filter(function(x){return 'ref:'+x[0]===purpose;})[0];
+    return g[1]+'を左から '+g[2].replace(/[mpsz]/,'').split('').join(' ')+' の順に並べ、枠に合わせてください';
+  }
+
+  // 撮った・選んだ画像(canvas)を、目的に合わせて読む
+  function useCanvas(purpose,cv){
+    if(purpose==='hand')readHandImage(cv);
+    else registerGroup(purpose.slice(4),cv);
+  }
+
+  // 切り分けの枠を描いた縮小画像(確かめる用)。img は読み取りに使った(傾きを直した)画像
+  function boxesThumb(img,boxes,colors){
+    var cv=document.createElement('canvas');cv.width=img.width;cv.height=img.height;
+    cv.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(img.data),img.width,img.height),0,0);
+    var sc=Math.min(1,480/cv.width),t=document.createElement('canvas');
+    t.width=Math.round(cv.width*sc);t.height=Math.round(cv.height*sc);
+    var c=t.getContext('2d');c.drawImage(cv,0,0,t.width,t.height);
+    c.lineWidth=2;
+    boxes.forEach(function(b,i){c.strokeStyle=colors[i];c.strokeRect(b.x*sc+1,b.y*sc+1,b.w*sc-2,b.h*sc-2);});
+    return t.toDataURL('image/jpeg',0.75);
+  }
+
+  function nextOpen(from){
+    var R=s.read,n=R.codes.length;
+    for(var k=1;k<=n;k++){var i=(from+k)%n;if(R.flag[i]==='none'||R.flag[i]==='unc'||R.flag[i]==='ai')return i;}
+    return null;
+  }
+  function fixRead(code){
+    var R=s.read;
+    R.codes[R.sel]=code;R.flag[R.sel]='fixed';
+    R.sel=nextOpen(R.sel);
+    syncHand();
+  }
+  // 読み取り結果 → 手牌(左から 手牌の枚数ぶん、残りの1枚が和了牌)
+  function syncHand(){
+    var R=s.read,h=s.hand,need=13-3*h.melds.length;
+    h.tiles=R.codes.slice(0,need).filter(Boolean).sort(cmpCode);
+    h.win=R.codes.length>need?(R.codes[need]||null):null;
+  }
+
+  async function readHandImage(cv){
+    var need=13-3*s.hand.melds.length,r;
+    ph.err='';ph.notes='';ph.stage='';
+    try{r=TR.reader.readHand(TR.lib.toImageData(cv),{count:need+1});}
+    catch(e){ph.thumb='';ph.err='牌の並びが見つかりませんでした。牌を横一列に並べ、枠いっぱいに写してください。';render();return;}
+    s.read={codes:r.codes.slice(),flag:r.codes.map(function(c,i){return !c?'none':(r.uncertain.indexOf(i)>=0?'unc':'ok');}),sel:null};
+    ph.thumb=boxesThumb(r.image,r.tiles.map(function(t){return t.box;}),r.tiles.map(function(t,i){return r.uncertain.indexOf(i)>=0?'#ffb000':'#3fbf6f';}));
+    syncHand();
+    var ask=r.uncertain.slice();
+    if(ask.length&&AI.available()){
+      ph.stage='自信のない牌が'+ask.length+'枚あるので、AIに確かめています…(10〜60秒)';
+      ph.ctl=new AbortController();render();
+      try{
+        var blob=await new Promise(function(res){cv.toBlob(res,'image/jpeg',0.9);});
+        var ans=await AI.checkTiles(blob,r.codes,ask,ph.ctl.signal);
+        ask.forEach(function(i){
+          var c=ans.tiles[i];
+          if(typeof c==='string'&&parseTile(c)){s.read.codes[i]=c;s.read.flag[i]='ai';}
+        });
+        ph.notes=ans.notes;
+        syncHand();
+      }catch(err){if(!err||err.code!=='cancelled')ph.err=errCopy(err&&err.code);}
+      ph.ctl=null;
+    }
+    ph.stage='';
+    var first=s.read.flag.indexOf('none');
+    s.read.sel=first>=0?first:null;
+    render();
+  }
+
+  function registerGroup(k,cv){
+    var g=GROUPS.filter(function(x){return x[0]===k;})[0],list=TR.lib.parseCodes(g[2]),img=TR.lib.toImageData(cv),layout,warn='';
+    TR.open=true;
+    try{
+      var seen=TR.lib.locateHand(img,{allowedCounts:null,aspect:TR.reader.aspect||0.75}).boxes.length;
+      if(seen!==list.length)warn=list.length+'枚のはずが'+seen+'枚に見えます。下の枠が1枚ずつに分かれていなければ、撮り直してください。';
+      var r2=TR.lib.createReader();
+      layout=r2.addReferenceRow(img,list);
+    }catch(e){
+      TR.msg[k]='牌の並びが見つかりませんでした。牌を横一列に並べ、枠いっぱいに写してください。';TR.preview[k]='';render();return;
+    }
+    TR.groups[k]=r2.exportReferences();
+    saveRefs();rebuildReader();
+    TR.msg[k]=warn;
+    TR.preview[k]=boxesThumb(layout.image,layout.boxes,layout.boxes.map(function(){return '#3fbf6f';}));
+    render();
+  }
+
+  /* ================= 撮影(枠つきプレビュー) ================= */
+  var cam={stream:null,purpose:null},camEl=document.getElementById('cam'),camV=document.getElementById('camv'),camF=document.getElementById('camf');
+  function placeFrame(){
+    var n=purposeCount(cam.purpose),W=window.innerWidth,H=window.innerHeight;
+    var w=Math.min(W*0.92,H*0.92/frameRatio(n)),h=w*frameRatio(n);
+    camF.style.width=w+'px';camF.style.height=h+'px';
+    camF.style.left=(W-w)/2+'px';camF.style.top=(H-h)/2+'px';
+  }
+  async function openCamera(purpose){
+    cam.purpose=purpose;ph.err='';
+    if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){camFail(purpose);return;}
+    try{
+      cam.stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}});
+    }catch(e){camFail(purpose);return;}
+    camV.srcObject=cam.stream;
+    document.getElementById('camtip').textContent=purposeTip(purpose);
+    camEl.hidden=false;placeFrame();
+    try{await camV.play();}catch(e){}
+  }
+  function camFail(purpose){
+    var m='この画面ではカメラのプレビューが使えません。「カメラアプリで撮る」か「写真を選ぶ」を使ってください。';
+    if(purpose==='hand')ph.err=m;else{TR.msg[purpose.slice(4)]=m;TR.open=true;}
+    render();
+  }
+  function closeCamera(){
+    if(cam.stream)cam.stream.getTracks().forEach(function(t){t.stop();});
+    cam.stream=null;camV.srcObject=null;camEl.hidden=true;
+  }
+  function shoot(){
+    var vw=camV.videoWidth,vh=camV.videoHeight;if(!vw)return;
+    var vr=camV.getBoundingClientRect(),fr=camF.getBoundingClientRect();
+    // object-fit:cover で表示している映像の、枠の範囲を元の画素で求める
+    var sc=Math.max(vr.width/vw,vr.height/vh),ox=(vr.width-vw*sc)/2,oy=(vr.height-vh*sc)/2;
+    var sx=Math.max(0,(fr.left-vr.left-ox)/sc),sy=Math.max(0,(fr.top-vr.top-oy)/sc);
+    var sw=Math.min(vw-sx,fr.width/sc),sh=Math.min(vh-sy,fr.height/sc);
+    var k=Math.min(1,1600/sw),cv=document.createElement('canvas');
+    cv.width=Math.round(sw*k);cv.height=Math.round(sh*k);
+    cv.getContext('2d').drawImage(camV,sx,sy,sw,sh,0,0,cv.width,cv.height);
+    var purpose=cam.purpose;
+    closeCamera();
+    useCanvas(purpose,cv);
+  }
+  window.addEventListener('resize',function(){if(!camEl.hidden)placeFrame();});
+
+  /* ================= 写真を選んだとき(端を2回タップして切り取る) ================= */
+  var crop={purpose:null,src:null,taps:[]},cropEl=document.getElementById('crop'),cropImg=document.getElementById('cropimg');
+  function loadFile(file,purpose){
+    var url=URL.createObjectURL(file),im=new Image();
+    im.onload=function(){
+      // 大きすぎる写真は長い辺 2400px に縮める(向きはブラウザが直す)
+      var k=Math.min(1,2400/Math.max(im.naturalWidth,im.naturalHeight)),cv=document.createElement('canvas');
+      cv.width=Math.round(im.naturalWidth*k);cv.height=Math.round(im.naturalHeight*k);
+      cv.getContext('2d').drawImage(im,0,0,cv.width,cv.height);
+      URL.revokeObjectURL(url);
+      crop.purpose=purpose;crop.src=cv;crop.taps=[];
+      cropImg.src=cv.toDataURL('image/jpeg',0.85);
+      cropTip();cropEl.hidden=false;
+    };
+    im.onerror=function(){URL.revokeObjectURL(url);ph.err='この画像は開けませんでした。別の写真を選んでください。';render();};
+    im.src=url;
+  }
+  function cropTip(){
+    document.getElementById('croptip').textContent=crop.taps.length?'次に、いちばん右の牌の右端をタップ':'いちばん左の牌の左端(高さは牌の真ん中)をタップ';
+    cropEl.querySelectorAll('.mk').forEach(function(m){m.remove();});
+    crop.taps.forEach(function(t){
+      var r=cropImg.getBoundingClientRect(),pr=cropImg.parentNode.getBoundingClientRect(),m=document.createElement('span');
+      m.className='mk';m.style.left=(r.left-pr.left+t.x/crop.src.width*r.width)+'px';m.style.top=(r.top-pr.top+t.y/crop.src.height*r.height)+'px';
+      cropImg.parentNode.appendChild(m);
+    });
+  }
+  cropImg.addEventListener('click',function(e){
+    var r=cropImg.getBoundingClientRect();
+    crop.taps.push({x:(e.clientX-r.left)/r.width*crop.src.width,y:(e.clientY-r.top)/r.height*crop.src.height});
+    if(crop.taps.length<2){cropTip();return;}
+    // 2点を結ぶ線が水平になるよう回し、その周りを撮影枠と同じ比率で切り取る
+    var a=crop.taps[0],b=crop.taps[1];if(b.x<a.x){var t=a;a=b;b=t;}
+    var span=Math.hypot(b.x-a.x,b.y-a.y),ang=Math.atan2(b.y-a.y,b.x-a.x);
+    var n=purposeCount(crop.purpose),w=span*1.12,h=w*frameRatio(n);
+    var k=Math.min(1,1600/w),cv=document.createElement('canvas');
+    cv.width=Math.round(w*k);cv.height=Math.round(h*k);
+    var c=cv.getContext('2d');
+    c.fillStyle='#000';c.fillRect(0,0,cv.width,cv.height);
+    c.translate(cv.width/2,cv.height/2);c.scale(k,k);c.rotate(-ang);
+    c.drawImage(crop.src,-(a.x+b.x)/2,-(a.y+b.y)/2);
+    cropEl.hidden=true;
+    var purpose=crop.purpose;crop.src=null;
+    useCanvas(purpose,cv);
+  });
+
+  document.addEventListener('click',function(e){
+    var b=e.target.closest('[data-cam]');if(!b)return;
+    var a=b.dataset.cam;
+    if(a==='shot')shoot();
+    else if(a==='redo'){crop.taps=[];cropTip();}
+    else if(a==='close'){closeCamera();cropEl.hidden=true;crop.src=null;}
+  });
+  document.addEventListener('change',function(e){
+    var t=e.target;
+    if(t&&t.dataset&&t.dataset.pick){
+      var f=t.files&&t.files[0];
+      if(f)loadFile(f,t.dataset.pick);
+      t.value='';
+    }
+  });
+  document.addEventListener('toggle',function(e){if(e.target&&e.target.id==='reg')TR.open=e.target.open;},true);
+
+  /* ================= AI(自信のない牌だけ聞く。差し替えはここだけ) ================= */
+  // available(): いま使えるか
+  // checkTiles(画像Blob, 手牌リーダーの答え, 聞きたい位置, signal) → {tiles:{位置:牌コード}, notes}
+  // いまは claude.ai の公開ページの sample 機能(見る人の Claude 利用枠)を使う。
+  var AI={
+    fn:null,state:'wait',
+    available:function(){return this.state==='ok';},
+    init:async function(){
+      try{
+        var f=window.claude&&window.claude.use?await window.claude.use('sample'):null;
+        var lim=f?await f.limits().catch(function(){return null;}):null;
+        this.fn=f;this.state=(lim&&lim.images)?'ok':'none';
+      }catch(e){this.state='none';}
+    },
+    checkTiles:async function(image,codes,ask,signal){
+      var lines=codes.map(function(c,i){return (i+1)+'枚目: '+(c||'?')+(ask.indexOf(i)>=0?'  ← 確かめてほしい':'');});
+      var prompt=[
+        'この画像は、麻雀牌を横一列に並べた写真です(左から'+codes.length+'枚)。',
+        '端末の中で機械的に読み取った結果は次のとおりです。「確かめてほしい」と書いた位置の牌だけを、写真から読み取ってください。',
+        lines.join('\n'),
+        '牌の表記: 萬子=1m〜9m、筒子=1p〜9p、索子=1s〜9s、字牌は 東=1z 南=2z 西=3z 北=4z 白=5z 發=6z 中=7z。赤五は 0m / 0p / 0s。',
+        'JSONだけで答えてください。形式: {"tiles":{"位置の番号":"牌"},"notes":"気になる点を日本語で短く"}',
+        '例: {"tiles":{"3":"5p","10":"7m"},"notes":""}',
+        '見えない・分からない牌は推測せず null にし、notes に書いてください。'
+      ].join('\n');
+      var j=await this.fn.json(prompt,{images:image,signal:signal});
+      var out={};
+      if(j&&j.tiles&&typeof j.tiles==='object'){
+        Object.keys(j.tiles).forEach(function(k){var i=parseInt(k,10)-1;if(ask.indexOf(i)>=0)out[i]=j.tiles[k];});
+      }
+      return {tiles:out,notes:j&&typeof j.notes==='string'?j.notes:''};
+    }
+  };
+  function errCopy(code){
+    return ({
+      not_granted:'AIの利用が許可されませんでした。色の付いた牌はタップで選び直してください。',
+      sampling_disabled:'このアカウントではAIが使えません。色の付いた牌はタップで選び直してください。',
+      rate_limited:'AIの使用回数の上限です。色の付いた牌はタップで選び直してください。',
+      image_rejected:'AIがこの画像を受け付けませんでした。色の付いた牌はタップで選び直してください。',
+      images_unavailable:'この画面ではAIに画像を送れません。色の付いた牌はタップで選び直してください。',
+      invalid_json:'AIの答えを解釈できませんでした。色の付いた牌はタップで選び直してください。',
+      session_expired:'ログインし直すとAIが使えます。色の付いた牌はタップで選び直してください。'
+    })[code]||'AIに確かめられませんでした。色の付いた牌はタップで選び直してください。';
+  }
+  AI.init();
+
+  render();
+
+  /* PWA: icon + manifest generated at runtime (single-file page) */
+  try{
+    var cv=document.createElement('canvas');cv.width=cv.height=180;
+    var cx=cv.getContext('2d');
+    cx.fillStyle='#1f5a43';cx.fillRect(0,0,180,180);
+    cx.fillStyle='#fbf6e6';cx.beginPath();
+    if(cx.roundRect)cx.roundRect(38,22,104,136,14);else cx.rect(38,22,104,136);
+    cx.fill();
+    cx.fillStyle='#b8351f';cx.font='800 84px serif';cx.textAlign='center';cx.textBaseline='middle';
+    cx.fillText('和',90,92);
+    var icon=cv.toDataURL('image/png');
+    var l=document.createElement('link');l.rel='apple-touch-icon';l.href=icon;document.head.appendChild(l);
+    var man={name:'麻雀点数計算',short_name:'麻雀点数',display:'standalone',background_color:'#0f261d',theme_color:'#0f261d',
+      icons:[{src:icon,sizes:'180x180',type:'image/png'}]};
+    var ml=document.createElement('link');ml.rel='manifest';
+    ml.href=URL.createObjectURL(new Blob([JSON.stringify(man)],{type:'application/manifest+json'}));
+    document.head.appendChild(ml);
+  }catch(e){}
+})();
+</script>
+</body>
+</html>

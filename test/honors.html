@@ -1,0 +1,140 @@
+<!doctype html>
+<meta charset="utf-8" />
+<script type="module">
+  // 字牌の「白」の調査: 囲まれた白（穴）、縦横の白線、字の塊の数、3×3 の粗い見え方
+  // 明朝体の太さ 4 種 × 距離 3 段階（近い / 中くらい / 遠い＝小さくぼかす）
+  import { drawTile, useStyle, ART } from '../tile-art.js';
+  import { readTileByRules } from '../mahjong-tile-reader.js';
+
+  const CHARS = { '1z': '東', '2z': '南', '3z': '西', '4z': '北', '6z': '發', '7z': '中' };
+  const WEIGHTS = { 細: '400', 中太: '600', 太: 'bold', 極太: '900' };
+  const DIST = [
+    { name: '近い', h: 84 },
+    { name: '中', h: 48 },
+    { name: '遠い', h: 32, blur: 0.6 },
+  ];
+
+  async function render(code, weight, d) {
+    useStyle('A');
+    ART.weight = weight;
+    const w = Math.round(d.h * 0.72);
+    let cv = new OffscreenCanvas(w + 8, d.h + 8);
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#2f6b4f';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    drawTile(ctx, code, 4, 4, w, d.h);
+    if (d.blur) {
+      const s = new OffscreenCanvas(Math.round(cv.width * d.blur), Math.round(cv.height * d.blur));
+      s.getContext('2d').drawImage(cv, 0, 0, s.width, s.height);
+      const b = new OffscreenCanvas(cv.width, cv.height);
+      b.getContext('2d').drawImage(s, 0, 0, cv.width, cv.height);
+      cv = b;
+    }
+    const fh = d.h * 0.86;
+    // 牌の表面の内側（縁を除く）
+    const box = { x: Math.round(4 + w * 0.08), y: Math.round(4 + fh * 0.06), w: Math.round(w * 0.84), h: Math.round(fh * 0.88) };
+    return { img: cv.getContext('2d').getImageData(0, 0, cv.width, cv.height), box, tileBox: { x: 4, y: 4, w, h: Math.round(fh) } };
+  }
+
+  function label(n, w, h, keep, mask4or8) {
+    const lab = new Int32Array(w * h).fill(-1);
+    const comps = [];
+    const st = new Int32Array(w * h);
+    for (let s = 0; s < w * h; s++) {
+      if (!keep(s) || lab[s] >= 0) continue;
+      const c = { area: 0, sx: 0, sy: 0, x0: w, y0: h, x1: -1, y1: -1 };
+      let sp = 0; st[sp++] = s; lab[s] = comps.length;
+      while (sp) {
+        const i = st[--sp]; const x = i % w; const y = (i - x) / w;
+        c.area++; c.sx += x; c.sy += y;
+        c.x0 = Math.min(c.x0, x); c.x1 = Math.max(c.x1, x); c.y0 = Math.min(c.y0, y); c.y1 = Math.max(c.y1, y);
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          if (!dx && !dy) continue;
+          if (mask4or8 === 4 && dx && dy) continue;
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          const j = ny * w + nx;
+          if (keep(j) && lab[j] < 0) { lab[j] = comps.length; st[sp++] = j; }
+        }
+      }
+      comps.push(c);
+    }
+    return comps;
+  }
+
+  function analyze({ img, box }) {
+    const { width: W, data } = img;
+    const { x: bx, y: by, w, h } = box;
+    const lum = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const p = ((by + y) * W + bx + x) * 4;
+      lum[y * w + x] = data[p] * 0.299 + data[p + 1] * 0.587 + data[p + 2] * 0.114;
+    }
+    const sorted = Array.from(lum).sort((a, b) => b - a);
+    const faceLum = sorted[Math.floor(sorted.length * 0.1)];
+    const ink = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) ink[i] = (faceLum - lum[i]) / (faceLum * 0.55) > 0.35 ? 1 : 0;
+
+    // 字の塊（小さな点は除く）
+    const blobs = label(null, w, h, (i) => ink[i], 8).filter((c) => c.area >= w * h * 0.004);
+    const gx0 = Math.min(...blobs.map((b) => b.x0)), gx1 = Math.max(...blobs.map((b) => b.x1));
+    const gy0 = Math.min(...blobs.map((b) => b.y0)), gy1 = Math.max(...blobs.map((b) => b.y1));
+    const gw = gx1 - gx0 + 1, gh = gy1 - gy0 + 1;
+
+    // 囲まれた白（字の外枠に触れない白い領域）
+    const inG = (i) => { const x = i % w, y = (i - x) / w; return x >= gx0 && x <= gx1 && y >= gy0 && y <= gy1; };
+    const whites = label(null, w, h, (i) => !ink[i] && inG(i), 4);
+    const holes = whites
+      .filter((c) => c.x0 > gx0 && c.x1 < gx1 && c.y0 > gy0 && c.y1 < gy1 && c.area >= gw * gh * 0.006)
+      .map((c) => {
+        const cx = (c.sx / c.area - gx0) / gw, cy = (c.sy / c.area - gy0) / gh;
+        const pos = (cy < 0.4 ? '上' : cy > 0.6 ? '下' : '中') + (cx < 0.4 ? '左' : cx > 0.6 ? '右' : '');
+        return pos;
+      });
+
+    // 縦の白線（字の中心 ±8%）、横の白線（字の中を横切る白い帯）
+    const colInk = (x) => { let n = 0; for (let y = gy0; y <= gy1; y++) n += ink[y * w + x]; return n; };
+    const rowInk = (y) => { let n = 0; for (let x = gx0; x <= gx1; x++) n += ink[y * w + x]; return n; };
+    const cx = Math.round((gx0 + gx1) / 2), dx = Math.max(1, Math.round(gw * 0.08));
+    let vLine = false;
+    for (let x = cx - dx; x <= cx + dx; x++) if (colInk(x) <= gh * 0.02) vLine = true;
+    let hBands = 0, inBand = false;
+    for (let y = gy0 + 1; y < gy1; y++) {
+      const empty = rowInk(y) <= gw * 0.02;
+      if (empty && !inBand) hBands++;
+      inBand = empty;
+    }
+
+    // 3×3 の粗い見え方（■ 濃い / ▪ 中 / □ 白い）
+    let grid = '';
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 3; c++) {
+        let n = 0, t = 0;
+        for (let y = gy0 + Math.floor((r * gh) / 3); y < gy0 + Math.floor(((r + 1) * gh) / 3); y++)
+          for (let x = gx0 + Math.floor((c * gw) / 3); x < gx0 + Math.floor(((c + 1) * gw) / 3); x++) { n += ink[y * w + x]; t++; }
+        const f = n / t;
+        grid += f > 0.4 ? '■' : f < 0.15 ? '□' : '▪';
+      }
+      if (r < 2) grid += '/';
+    }
+    // 斜めの特徴: 四隅の三角形（字の枠で x+y < 0.35 など）のインクの割合、上端・下端付近の字の幅
+    const tri = (f) => { let n = 0, t = 0; for (let y = gy0; y <= gy1; y++) for (let x = gx0; x <= gx1; x++) { const u = (x - gx0) / gw, v = (y - gy0) / gh; if (f(u, v)) { t++; n += ink[y * w + x]; } } return t ? n / t : 0; };
+    const k = 0.35;
+    const corners = [tri((u, v) => u + v < k), tri((u, v) => 1 - u + v < k), tri((u, v) => u + 1 - v < k), tri((u, v) => 2 - u - v < k)].map((x) => x.toFixed(2));
+    const widthAt = (fy) => { const y = gy0 + Math.round(fy * (gh - 1)); let a = -1, b = -1; for (let x = gx0; x <= gx1; x++) if (ink[y * w + x]) { if (a < 0) a = x; b = x; } return a < 0 ? 0 : (b - a + 1) / gw; };
+    const tops = [0.03, 0.1, 0.2].map((f) => widthAt(f).toFixed(2));
+    return { 四隅: corners.join(' '), 上端の幅: tops.join(' '), 塊: blobs.length, 穴: holes.length ? holes.join('・') : 'なし', 縦白線: vLine ? '○' : '×', 横白帯: hBands, '3x3': grid };
+  }
+
+  const out = [];
+  for (const [code, ch] of Object.entries(CHARS)) {
+    for (const [wn, wv] of Object.entries(WEIGHTS)) {
+      for (const d of DIST) {
+        const r = await render(code, wv, d);
+        const rule = readTileByRules(r.img, r.tileBox);
+        out.push({ 字: ch, code, 太さ: wn, 距離: d.name, ...analyze(r), 規則: rule.code || '—', 理由: rule.reason, 穴座標: JSON.stringify(rule.detail?.holes || []), 下段: JSON.stringify(rule.detail?.bottom || []) });
+      }
+    }
+  }
+  window.results = out;
+</script>

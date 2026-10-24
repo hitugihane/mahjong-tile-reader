@@ -1,0 +1,122 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>アプリの通しテスト</title>
+<style>
+  html, body { margin: 0; height: 100%; }
+  iframe { border: 0; width: 100%; height: 100%; }
+</style>
+<iframe id="app"></iframe>
+<script type="module">
+  // 麻雀点数計算アプリを、claude.ai の sample 機能のにせものを入れた状態で開く（AI に聞く流れの確認用）。
+  // アプリのファイルは書き換えず、読み込むときに <head> の先頭へにせものを差し込む。
+  //   ?ai=0 … AI なし（claude.ai の外と同じ）
+  // コンソールから:
+  //   await runCase(['1m', ...14枚], { tilt: 1, persp: 0.04, style: 'A' })  手牌の写真を「写真を選ぶ」から入れ、端を2回タップ
+  //   await registerAll({ style: 'A' })                                    自分の牌を4種類とも登録
+  import { drawHand, useStyle } from '../tile-art.js';
+  import { photoize } from './photo-sim.js';
+
+  const params = new URLSearchParams(location.search);
+  const useAI = params.get('ai') !== '0';
+  const frame = document.getElementById('app');
+
+  // にせもの: 「確かめてほしい」と書いた位置に、window.__truth の牌を答える
+  const mock = `<script>
+    window.__calls = [];
+    window.claude = { use: async (name) => {
+      if (name !== 'sample') return null;
+      const f = async () => ({ text: '' });
+      f.limits = async () => ({ maxPromptBytes: 262144, images: { maxCount: 5, maxInputBytes: 20000000, mediaTypes: ['image/jpeg', 'image/png'] } });
+      f.json = async (prompt, opts) => {
+        window.__calls.push({ prompt, images: opts && opts.images ? 1 : 0 });
+        await new Promise((r) => setTimeout(r, 600));
+        const tiles = {};
+        prompt.split('\\n').forEach((l) => {
+          const m = /^(\\d+)枚目: .*確かめてほしい/.exec(l);
+          if (m) tiles[m[1]] = (window.__truth || [])[m[1] - 1] || null;
+        });
+        return { tiles, notes: 'テスト用の答え' };
+      };
+      return f;
+    } };
+  <\/script>`;
+
+  const html = await (await fetch('../app/%E9%BA%BB%E9%9B%80%E7%82%B9%E6%95%B0%E8%A8%88%E7%AE%97.html')).text();
+  frame.srcdoc = html.replace('<head>', '<head><base href="' + new URL('../app/', location.href) + '">' + (useAI ? mock : ''));
+  await new Promise((r) => frame.addEventListener('load', r, { once: true }));
+  const win = () => frame.contentWindow;
+  const doc = () => frame.contentDocument;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  let seed = 77;
+  const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+
+  // 写真らしい画像と、牌の並びの左端・右端（牌の中ほどの高さ）の位置
+  function make(codes, { tilt = 0, persp = 0, style = 'A' } = {}) {
+    useStyle(style);
+    const o = { tileH: 90, gap: 1, tsumoGap: 0, pad: 6, bg: '#6b4a2e' };
+    const s = drawHand(null, codes, o);
+    const c = new OffscreenCanvas(s.width, s.height);
+    drawHand(c.getContext('2d'), codes, o);
+    const p = { persp, margin: 0.25, tilt, desk: '#9c8f7c', vignette: 0.15, lightLeft: true, shadow: { at: 0.5, width: 0.2, depth: 0.2 } };
+    const out = photoize(c, p, rand);
+    const w = c.width, h = c.height, W = out.width, H = out.height;
+    const mx = Math.round(w * 0.25), my = Math.round(h * 0.25 * 2.5);
+    const yc = o.pad + o.tileH * 0.43, k = 1 - persp * (1 - yc / h);
+    const rot = (x, y) => {
+      const a = (tilt * Math.PI) / 180, dx = x + mx - W / 2, dy = y + my - H / 2;
+      return { x: W / 2 + dx * Math.cos(a) - dy * Math.sin(a), y: H / 2 + dx * Math.sin(a) + dy * Math.cos(a) };
+    };
+    return { canvas: out, left: rot((w - w * k) / 2 + o.pad * k, yc), right: rot((w - w * k) / 2 + (w - o.pad) * k, yc) };
+  }
+
+  // 「写真を選ぶ」に画像を入れ、切り取り画面で左端・右端をタップする
+  async function feed(purpose, made) {
+    const blob = await made.canvas.convertToBlob({ type: 'image/jpeg', quality: 0.9 });
+    const inp = doc().querySelector(`input[data-pick="${purpose}"]`);
+    const dt = new DataTransfer();
+    dt.items.add(new File([blob], 'photo.jpg', { type: 'image/jpeg' }));
+    inp.files = dt.files;
+    inp.dispatchEvent(new Event('change', { bubbles: true }));
+    const crop = doc().getElementById('crop');
+    for (let i = 0; i < 50 && crop.hidden; i++) await wait(100);
+    await wait(300);
+    const img = doc().getElementById('cropimg');
+    const tap = (pt) => {
+      const r = img.getBoundingClientRect();
+      img.dispatchEvent(new (win().MouseEvent)('click', { bubbles: true, clientX: r.left + (pt.x / made.canvas.width) * r.width, clientY: r.top + (pt.y / made.canvas.height) * r.height }));
+    };
+    tap(made.left);
+    tap(made.right);
+  }
+
+  const state = () => JSON.parse(win().localStorage.getItem('mj-calc-v2'));
+
+  window.registerAll = async (opt = {}) => {
+    for (const g of ['123456789m', '123456789p', '123456789s', '1234567z']) {
+      const list = g.slice(0, -1).split('').map((d) => d + g.slice(-1));
+      await feed('ref:' + g.slice(-1), make(list, { tilt: (rand() * 2 - 1) * 1.5, persp: 0.03, ...opt }));
+      await wait(300);
+    }
+    return Object.keys(JSON.parse(win().localStorage.getItem('mj-refs-v1') || '{"groups":{}}').groups);
+  };
+
+  window.runCase = async (codes, opt = {}) => {
+    win().__truth = codes;
+    const before = (win().__calls || []).length;
+    await feed('hand', make(codes, opt));
+    for (let i = 0; i < 40 && doc().body.textContent.includes('AIに確かめています'); i++) await wait(200);
+    await wait(200);
+    const st = state();
+    return {
+      read: st.read,
+      correct: st.read ? st.read.codes.filter((c, i) => c === codes[i]).length : 0,
+      aiCalls: (win().__calls || []).length - before,
+      lastPrompt: (win().__calls || []).slice(-1)[0]?.prompt,
+      plaque: doc().getElementById('plaque').textContent,
+    };
+  };
+  window.appDoc = doc;
+  window.ready = true;
+</script>
