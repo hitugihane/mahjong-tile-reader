@@ -1150,6 +1150,8 @@ span.tile:active{transform:none;box-shadow:0 3px 0 var(--tile-edge)}
   // available(): いま使えるか
   // checkTiles(画像Blob, 手牌リーダーの答え, 聞きたい位置, signal) → {tiles:{位置:牌コード}, notes}
   // いまは claude.ai の公開ページの sample 機能(見る人の Claude 利用枠)を使う。
+  // window.claude は claude.ai の中でしか用意されないので、ほかの場所(GitHub Pages など)では
+  // AI は最初から使わず、画像は端末の外に出ない。
   var AI={
     fn:null,state:'wait',
     available:function(){return this.state==='ok';},

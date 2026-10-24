@@ -145,6 +145,10 @@ python3 test/run-bench.py "n=200&seed=11&jpeg=0.5&photo=1&effects=persp" '[{"nam
 
 ## 麻雀点数計算アプリへの組み込み（`app/`）
 
+**使う**: https://hitugihane.github.io/mahjong-tile-reader/ （GitHub Pages。ログイン不要。AI は使わず、牌の読み取りも点数計算もすべて端末の中で行う。外に出る通信はフォントの読み込みだけ）
+
+claude.ai の公開ページに置いた版だけは、Claude にログインした人の利用枠で、自信のない牌を AI に確かめる（下の手順 3）。同じファイルで、`window.claude` があるとき（claude.ai の中）だけ AI を使う。
+
 「写真で計算」の流れ:
 
 1. **撮る**: 「枠に合わせて撮る」でカメラのプレビューに枠を出し、手牌（和了牌を右端に置いた14枚。副露があれば手の中の牌だけ）を枠に合わせて撮る。枠の範囲だけを切り出して読む。プレビューが使えない画面（claude.ai の公開ページなど、カメラが許可されないとき）では「カメラアプリで撮る」（`capture="environment"`）か「写真を選ぶ」を使い、写真の上で並びの左端・右端を2回タップして切り取る（2点を結ぶ線が水平になるよう回してから切る）
@@ -173,6 +177,7 @@ python3 test/run-bench.py "n=200&seed=11&jpeg=0.5&photo=1&effects=persp" '[{"nam
 - `app/麻雀点数計算.html` … 点数計算アプリ（claude.ai の公開ページの元のHTML。2026-09-21 版に、手牌リーダーでの読み取りを 2026-10-24 に組み込んだ）
 - `app/mahjong-tile-reader.js` … アプリが読み込むライブラリのコピー
 - `LICENSE` … MIT ライセンス
+- `index.html`, `.nojekyll` … GitHub Pages の入口（`app/麻雀点数計算.html` へ移動するだけ）と、Jekyll を通さない設定
 - `ライセンス・利用条件.md` … 使う可能性のあるライブラリ・フォント・公開先・AI の利用条件（2026-10-24 確認）
 - `tile-art.js` … テスト・デモ用のサンプル牌の絵。`useStyle('A' | 'B')` で絵柄を切り替え（A: 明朝・太字、B: 明朝・極太）（本番では不要）
 - `demo/` … デモページ（ライブラリのコピー入り。`python3 test/serve.py` などで開く）
